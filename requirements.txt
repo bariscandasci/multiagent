@@ -1,0 +1,11 @@
+# Python 3.10+
+# langchain-openai 1.8+ yalnızca Python 3.11+ kurar; 3.10'da pip 1.7.x seçer.
+langgraph>=1.0.5,<2
+langchain-core>=0.3.60,<2
+langchain-openai>=0.3.28,<2
+fastapi>=0.115.0,<1
+uvicorn>=0.32.0,<1
+python-dotenv>=1.0.1,<2
+pydantic>=2.7.4,<3
+httpx>=0.27.0,<1
+pytest>=8.0.0,<10
