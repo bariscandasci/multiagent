@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Callable
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
-from config import Settings, get_chat_model, get_settings
+from agents.handoff import compact_handoff
+from agents.progress import announce, observe, publish_section
+from config import Settings, bind_agent_model, describe_llm_error, get_settings
 from tools.common import DISCLAIMER
 
 logger = logging.getLogger(__name__)
@@ -71,12 +74,25 @@ def render_mock(title: str, messages: list, tools: list, plan_calls: PlanCalls) 
     return f"{title}\n\n{body}\n\n{DISCLAIMER}", used
 
 
-def _history(messages: list) -> list:
+def prune_messages(messages: list) -> list:
+    """Önceki tam raporları modele vermez; en fazla 200 kelimelik özet ve sayılar kalır."""
     kept = []
     for message in messages:
-        if isinstance(message, (HumanMessage, AIMessage)) and not getattr(message, "tool_calls", None):
+        if isinstance(message, HumanMessage):
             kept.append(message)
+            continue
+        if isinstance(message, AIMessage) and not getattr(message, "tool_calls", None):
+            kept.append(
+                AIMessage(
+                    content=compact_handoff(message_text(message.content)),
+                    name=getattr(message, "name", None),
+                )
+            )
     return kept[-8:]
+
+
+def _history(messages: list) -> list:
+    return prune_messages(messages)
 
 
 def _call_parts(call: object) -> tuple[str, dict, str]:
@@ -93,8 +109,15 @@ def _call_parts(call: object) -> tuple[str, dict, str]:
     return name, args, call_id
 
 
-def llm_answer(settings: Settings, system_prompt: str, tools: list, messages: list) -> tuple[str, list[str]]:
-    model = get_chat_model(settings).bind_tools(tools)
+def llm_answer(
+    settings: Settings,
+    system_prompt: str,
+    tools: list,
+    messages: list,
+    temperature: float | None = None,
+) -> tuple[str, list[str]]:
+    # strict gönderilmez: Gemini OpenAI ucu function.strict alanını 400 ile reddeder.
+    model = bind_agent_model(settings, temperature, tools=tools)
     convo: list = [SystemMessage(content=system_prompt), *_history(messages)]
     used: list[str] = []
     last_tool_text = ""
@@ -122,29 +145,48 @@ def run_department(
     system_prompt: str,
     tools: list,
     plan_calls: PlanCalls,
+    finalize: Callable[[str, list[str]], str] | None = None,
+    pipeline_label: str = "",
+    temperature: float | None = None,
 ) -> dict:
     messages = list(state.get("messages") or [])
     settings = get_settings()
     mode = "mock"
+    label = pipeline_label or title
+    announce(department, label)
+    started = time.perf_counter()
     if settings.configured:
         try:
-            answer, used = llm_answer(settings, system_prompt, tools, messages)
+            answer, used = llm_answer(settings, system_prompt, tools, messages, temperature)
         except Exception as exc:
-            logger.warning("LLM ajanı başarısız, mock rapora düşüldü: %s", exc.__class__.__name__)
+            logger.warning(
+                "LLM ajanı başarısız, mock rapora düşüldü: %s",
+                describe_llm_error(exc),
+            )
             answer, used = render_mock(title, messages, tools, plan_calls)
-            answer += "\n\nNot: LLM çağrısı başarısız oldu; örnek araç raporu gösterildi."
+            if finalize:
+                answer = finalize(answer, used)
+            answer += "\n\nNot: LLM çağrısı başarısız oldu; kayıtlı defter ve proje dosyalarından rapor üretildi."
         else:
             if used and answer.strip():
                 mode = "llm"
             else:
                 answer, used = render_mock(title, messages, tools, plan_calls)
+                if finalize:
+                    answer = finalize(answer, used)
     else:
         answer, used = render_mock(title, messages, tools, plan_calls)
+        if finalize:
+            answer = finalize(answer, used)
 
+    step = observe(department, label, used, started)
+    publish_section(department, answer)
+    prior = [item for item in (state.get("trace") or []) if isinstance(item, dict)]
     return {
         "messages": [AIMessage(content=answer, name=agent_name)],
         "department": department,
         "route": department,
         "mode": mode,
         "tools_used": used,
+        "trace": prior + [step],
     }

@@ -1,0 +1,1499 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BCD TECHNOLOGIES — AI Command Center</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.2/dist/purify.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
+  <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ["Inter", "ui-sans-serif", "sans-serif"],
+            mono: ["JetBrains Mono", "ui-monospace", "monospace"]
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    html, body { height: 100%; background: #09090b; }
+    body { margin: 0; color: #fafafa; font-family: Inter, "Segoe UI", sans-serif; }
+    .app { min-height: 100vh; display: flex; flex-direction: column; }
+    .shell { flex: 1; min-height: 0; display: grid; grid-template-columns: 260px minmax(0, 1fr) 340px; }
+    .shell > * { min-height: 0; overflow: auto; }
+    .glass { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.10); backdrop-filter: blur(16px); }
+    .hidden { display: none !important; }
+    .md h1, .md h2, .md h3 { font-weight: 600; margin: 0.9rem 0 0.35rem; letter-spacing: -0.01em; }
+    .md p { color: #d4d4d8; line-height: 1.65; margin: 0.45rem 0; }
+    .md ul, .md ol { margin: 0.4rem 0; padding-left: 1.15rem; color: #d4d4d8; }
+    .md li { margin: 0.2rem 0; }
+    .md table { width: 100%; border-collapse: collapse; margin: 0.8rem 0; font-size: 0.92em; }
+    .md th, .md td { border-bottom: 1px solid rgba(255,255,255,0.10); padding: 0.45rem 0.55rem; text-align: left; }
+    .md th { color: #e8c99a; font-weight: 600; font-size: 0.75rem; letter-spacing: 0.04em; text-transform: uppercase; }
+    .md code { font-family: "JetBrains Mono", monospace; background: rgba(255,255,255,0.06); padding: 0.1rem 0.35rem; border-radius: 0.35rem; }
+    .node.running { box-shadow: 0 0 0 1px rgba(232,201,154,0.85); background: rgba(232,201,154,0.08); }
+    .node.skipped { opacity: 0.45; }
+    .live-dot { display: inline-block; width: 0.45rem; height: 0.45rem; margin-right: 0.35rem; border-radius: 999px; background: #e8c99a; animation: pulse 1.2s ease-in-out infinite; }
+    @keyframes pulse { 50% { opacity: 0.35; } }
+    .iso-shell { container: office / inline-size; min-width: 0; overflow: hidden; border-radius: 1.25rem; border: 1px solid rgba(255,255,255,0.08); background: radial-gradient(120% 80% at 50% 0%, #241c16 0%, #09090b 58%); padding: 1rem 1rem 0.75rem; }
+    .iso-kicker { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.22em; color: #e8c99a; }
+    .iso-capsules { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+    .iso-capsule { display: inline-flex; align-items: center; gap: 0.4rem; max-width: 100%; border-radius: 999px; border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.07); padding: 0.38rem 0.75rem; color: #fafafa; font-size: 0.75rem; backdrop-filter: blur(14px); }
+    .iso-capsule.running { border-color: var(--room, #e8c99a); box-shadow: 0 0 18px color-mix(in srgb, var(--room) 55%, transparent); }
+    .iso-dot, .role-dot { width: 0.48rem; height: 0.48rem; flex: none; border-radius: 999px; background: var(--room, #e8c99a); }
+    .iso-canvas { container-type: inline-size; position: relative; width: 100%; aspect-ratio: 1000 / 620; margin-top: 0.75rem; overflow: hidden; }
+    .iso-svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+    .iso-glow { fill: var(--room, #e8c99a); opacity: 0; transition: opacity 0.25s ease; }
+    .iso-glow.running { opacity: 0.38; }
+    .iso-actor.skipped { opacity: 0.45; }
+    .iso-bob { transform-box: fill-box; transform-origin: center bottom; }
+    .iso-actor.idle .iso-bob, .iso-actor.done .iso-bob, .iso-actor.skipped .iso-bob { animation: iso-bob 2.8s ease-in-out infinite; }
+    .iso-actor.running .iso-bob { animation: iso-type 0.34s ease-in-out infinite; }
+    .iso-actor.running .iso-arm { animation: office-keys 0.16s linear infinite; }
+    .iso-actor.running .iso-screen { fill: var(--ink, #e8c99a); animation: pulse 0.9s ease-in-out infinite; }
+    .office-room { position: absolute; border: 0; background: transparent; padding: 0; color: inherit; pointer-events: none; }
+    .office-room button { font: inherit; cursor: pointer; }
+    .room-hit { position: absolute; inset: 0; pointer-events: auto; border: 0; background: transparent; clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
+    .dept-sign, .role-tag, .office-bubble, .office-check { pointer-events: auto; }
+    .dept-sign { position: absolute; left: 50%; top: 78%; transform: translate(-50%, -50%); max-width: 78%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: 0.3rem; border: 1px solid #000; background: #1a120e; color: #f6efe6; padding: 0.12rem 0.4rem; font-size: clamp(8px, 1.45cqi, 11px); font-weight: 700; letter-spacing: 0.04em; }
+    .role-tag { position: absolute; left: 50%; top: 44%; transform: translate(-50%, -50%); display: inline-flex; align-items: center; gap: 0.28rem; max-width: 90%; overflow: hidden; border: 0; border-radius: 999px; background: #fff; color: #18181b; padding: 0.12rem 0.48rem; font-size: clamp(8px, 1.6cqi, 12px); font-weight: 600; white-space: nowrap; box-shadow: 0 6px 16px rgba(0,0,0,0.22); }
+    .room-supervisor .dept-sign { top: 14%; }
+    .room-market .dept-sign, .room-rnd .dept-sign { left: 50%; top: 68%; }
+    .room-finance .dept-sign { top: 86%; }
+    .room-market .role-tag, .room-rnd .role-tag { left: 50%; top: 30%; }
+    .office-room.running .role-tag { box-shadow: 0 0 0 2px var(--room, #e8c99a), 0 0 16px var(--room, #e8c99a); }
+    .office-room.running .role-dot { animation: pulse 1s ease-in-out infinite; }
+    .office-bubble { position: absolute; left: 50%; top: 8%; transform: translate(-50%, -50%); max-width: 88%; border-radius: 0.75rem; background: #fafafa; color: #18181b; font-size: clamp(8px, 1.5cqi, 12px); line-height: 1.25; padding: 0.22rem 0.42rem; white-space: nowrap; }
+    .office-check { position: absolute; left: 72%; top: 58%; width: 1.25rem; height: 1.25rem; display: grid; place-items: center; border-radius: 999px; background: #34d399; color: #052e16; font-size: 0.75rem; font-weight: 700; }
+    .office-packet { position: absolute; z-index: 5; min-width: 2.6rem; padding: 0.2rem 0.35rem; border-radius: 0.4rem; background: #e8c99a; color: #18181b; font-size: 0.65rem; font-weight: 700; text-align: center; pointer-events: none; }
+    .iso-dock { position: sticky; bottom: 0; z-index: 4; display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; padding: 0.6rem; border-radius: 1rem; border: 1px solid rgba(255,255,255,0.12); background: rgba(9,9,11,0.9); backdrop-filter: blur(16px); }
+    .iso-dock input, .iso-dock select { min-width: 0; max-width: 100%; border-radius: 0.8rem; border: 1px solid rgba(255,255,255,0.12); background: rgba(0,0,0,0.35); color: #fafafa; padding: 0.55rem 0.75rem; font-size: 0.875rem; }
+    .iso-dock input { flex: 1 1 12rem; }
+    .iso-dock select { flex: 1 1 11rem; }
+    .iso-dock button { flex: 0 0 auto; }
+    @keyframes iso-bob { 50% { transform: translateY(-3px); } }
+    @keyframes iso-type { 50% { transform: translateY(1px); } }
+    @keyframes office-keys { 50% { transform: translateY(2px) scaleX(0.92); } }
+    @container office (max-width: 560px) {
+      .iso-canvas { aspect-ratio: auto; overflow: visible; }
+      .iso-svg { position: relative; width: 100%; height: auto; }
+      .office-room { position: static !important; left: auto !important; top: auto !important; width: auto !important; height: auto !important; display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; margin-top: 0.45rem; pointer-events: auto; }
+      .room-hit { display: none; }
+      .role-tag, .dept-sign, .office-bubble, .office-check { position: static; transform: none; max-width: 100%; }
+    }
+    @media (max-width: 1100px) { .shell { grid-template-columns: 1fr; } }
+    @media (prefers-reduced-motion: reduce) {
+      .iso-bob, .iso-arm, .iso-screen, .role-dot { animation: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="border-b border-white/10 px-5 py-4">
+      <div class="flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <span class="grid h-10 w-10 place-items-center rounded-xl bg-white/5 ring-1 ring-white/10">
+            <i data-lucide="hexagon" class="h-5 w-5 text-[#e8c99a]"></i>
+          </span>
+          <div>
+            <p class="text-[11px] font-medium uppercase tracking-[0.22em] text-[#e8c99a]">BCD TECHNOLOGIES</p>
+            <h1 class="text-lg font-semibold tracking-tight">AI Command Center</h1>
+            <p class="text-xs text-zinc-500">Çoklu Ajan Komuta Merkezi</p>
+          </div>
+        </div>
+        <div id="model-badge" class="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 font-mono text-xs text-zinc-300">
+          <span class="h-1.5 w-1.5 rounded-full bg-zinc-500"></span>
+          <span>model</span>
+        </div>
+      </div>
+      <div class="mt-4 grid gap-3 sm:grid-cols-3">
+        <article class="glass rounded-2xl px-4 py-3">
+          <p class="text-[11px] uppercase tracking-[0.16em] text-zinc-500">Toplam aylık gider</p>
+          <p id="kpi-total" class="mt-1 font-mono text-2xl font-medium">—</p>
+        </article>
+        <article class="glass rounded-2xl px-4 py-3">
+          <p class="text-[11px] uppercase tracking-[0.16em] text-zinc-500">Sabit gider</p>
+          <p id="kpi-fixed" class="mt-1 font-mono text-2xl font-medium">—</p>
+        </article>
+        <article class="glass rounded-2xl px-4 py-3">
+          <p class="text-[11px] uppercase tracking-[0.16em] text-zinc-500">Hedef brüt kâr / Gerçekleşen gelir</p>
+          <p id="kpi-profit" class="mt-1 font-mono text-2xl font-medium text-[#e8c99a]">—</p>
+          <p id="kpi-income" class="text-[11px] text-zinc-500">Gerçekleşen gelir —</p>
+        </article>
+      </div>
+    </header>
+
+    <div class="shell">
+      <aside class="border-r border-white/10 p-4">
+        <div class="grid grid-cols-2 gap-2">
+          <button id="nav-command" class="rounded-xl bg-[#e8c99a] px-3 py-2 text-sm font-medium text-zinc-950" type="button">Komuta</button>
+          <button id="nav-office" class="rounded-xl border border-white/10 px-3 py-2 text-sm text-zinc-300" type="button">Sanal Ofis</button>
+          <button id="nav-crm" class="rounded-xl border border-white/10 px-3 py-2 text-sm text-zinc-300" type="button">Satış Hunisi</button>
+          <button id="nav-studio" class="rounded-xl border border-white/10 px-3 py-2 text-sm text-zinc-300" type="button">Ajan Eğitimi</button>
+        </div>
+        <p class="mt-6 text-[11px] uppercase tracking-[0.16em] text-zinc-500">Kayıtlı depolar</p>
+        <div id="projects" class="mt-3 space-y-2 text-sm"></div>
+        <p class="mt-6 text-[11px] uppercase tracking-[0.16em] text-zinc-500">Hızlı komutlar</p>
+        <div class="mt-3 space-y-2">
+          <button class="quick w-full rounded-xl border border-white/10 px-3 py-2 text-left text-sm hover:border-[#e8c99a]/50" data-command="Aylık sabit giderleri çıkar" type="button">Sabit giderler</button>
+          <button class="quick w-full rounded-xl border border-white/10 px-3 py-2 text-left text-sm hover:border-[#e8c99a]/50" data-command="Kayıtlı projeyi hangi sektörlere satabiliriz" type="button">Satış stratejisi</button>
+          <button class="quick w-full rounded-xl border border-white/10 px-3 py-2 text-left text-sm hover:border-[#e8c99a]/50" data-command="Kayıtlı projenin teknik Ar-Ge yol haritasını çıkar" type="button">Ar-Ge yol haritası</button>
+        </div>
+      </aside>
+
+      <main class="min-w-0 p-4 md:p-5">
+        <section id="view-command" class="space-y-4">
+          <form id="command-form" class="glass rounded-2xl p-4">
+            <label for="command" class="text-[11px] uppercase tracking-[0.16em] text-zinc-500">Üst komuta alanı</label>
+            <textarea id="command" rows="3" class="mt-2 w-full resize-y rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm outline-none focus:border-[#e8c99a]/60" placeholder="GitHub deposu veya yönetici talimatı"></textarea>
+            <div class="mt-3 flex items-center justify-between gap-3">
+              <p id="session" class="font-mono text-[11px] text-zinc-500"></p>
+              <button id="run" class="rounded-xl bg-[#e8c99a] px-4 py-2 text-sm font-semibold text-zinc-950 disabled:opacity-50" type="submit">Ajanları Çalıştır</button>
+            </div>
+          </form>
+
+          <section class="glass rounded-2xl p-4">
+            <div class="flex items-center justify-between">
+              <p class="text-[11px] uppercase tracking-[0.16em] text-zinc-500">Ajan akışı</p>
+              <p id="flow-note" class="font-mono text-[11px] text-zinc-500">Hazır</p>
+            </div>
+            <ol id="pipeline" class="mt-3 grid gap-3 md:grid-cols-4"></ol>
+            <div id="run-progress" class="mt-3 hidden" role="progressbar" aria-valuemin="0" aria-valuemax="4" aria-valuenow="0" aria-label="Ajan ilerlemesi">
+              <div class="flex items-center justify-between font-mono text-[11px] text-zinc-400">
+                <span id="run-progress-label">Hazır</span>
+                <span id="run-progress-count">0/0</span>
+              </div>
+              <div class="mt-1 h-1.5 overflow-hidden rounded-full bg-white/10">
+                <div id="run-progress-bar" class="h-full w-0 bg-[#e8c99a] transition-all"></div>
+              </div>
+            </div>
+          </section>
+
+          <section class="glass rounded-2xl p-4">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div id="tabs" class="flex flex-wrap gap-2">
+                <button class="tab rounded-lg bg-white/10 px-3 py-1.5 text-sm" data-panel="executive" type="button">Yönetici Özeti</button>
+                <button class="tab rounded-lg px-3 py-1.5 text-sm text-zinc-400" data-panel="market" type="button">Operasyon &amp; Pazar</button>
+                <button class="tab rounded-lg px-3 py-1.5 text-sm text-zinc-400" data-panel="rnd" type="button">Teknik &amp; Ar-Ge</button>
+                <button class="tab rounded-lg px-3 py-1.5 text-sm text-zinc-400" data-panel="finance" type="button">Muhasebe &amp; Finans</button>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <button id="copy-report" class="inline-flex items-center gap-1 rounded-lg border border-white/10 px-3 py-1.5 text-xs" type="button"><i data-lucide="copy" class="h-3.5 w-3.5"></i>Kopyala</button>
+                <button id="download-report" class="inline-flex items-center gap-1 rounded-lg border border-white/10 px-3 py-1.5 text-xs" type="button"><i data-lucide="download" class="h-3.5 w-3.5"></i>Markdown İndir</button>
+                <button id="download-pdf" class="inline-flex items-center gap-1 rounded-lg border border-[#e8c99a]/40 px-3 py-1.5 text-xs text-[#e8c99a]" type="button"><i data-lucide="file-text" class="h-3.5 w-3.5"></i>PDF Teklif İndir</button>
+              </div>
+            </div>
+            <article id="report" class="md mt-4 min-h-56 text-sm"></article>
+            <div id="email-launch" class="mt-4 hidden">
+              <button id="open-email" class="rounded-xl border border-[#e8c99a]/40 px-4 py-2 text-sm" type="button">Müşteri E-postası Oluştur</button>
+            </div>
+          </section>
+        </section>
+
+        <section id="view-studio" class="hidden space-y-4">
+          <div class="glass rounded-2xl p-4">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <h2 class="text-base font-semibold">Ajan Eğitimi &amp; Direktifler</h2>
+                <p class="mt-1 text-sm text-zinc-400">Rol tanımı ve yaratıcılık ayarı kaydedilir; ajanlar bir sonraki çalışmada bu metni okur.</p>
+              </div>
+              <button id="save-config" class="rounded-xl bg-[#e8c99a] px-4 py-2 text-sm font-semibold text-zinc-950" type="button">Kaydet</button>
+            </div>
+            <p id="config-note" class="mt-3 text-sm text-[#e8c99a]"></p>
+            <div id="directive-forms" class="mt-4 space-y-4"></div>
+          </div>
+          <div class="glass rounded-2xl p-4">
+            <h2 class="text-base font-semibold">Şirket Hafızası / Bilgi Ekle</h2>
+            <p class="mt-1 text-sm text-zinc-400">Kurallar, hedef sektör tercihleri ve teknik standartlar tüm ajanların bağlamına eklenir.</p>
+            <form id="memory-form" class="mt-3 flex flex-col gap-2 sm:flex-row">
+              <input id="memory-text" class="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm outline-none focus:border-[#e8c99a]/60" placeholder="Örnek: Tekliflerde Kamu ve yerel yönetimler önceliklidir" required>
+              <button class="rounded-xl border border-[#e8c99a]/40 px-4 py-2 text-sm" type="submit">Hafızaya ekle</button>
+            </form>
+            <div id="memory-list" class="mt-4 space-y-2 text-sm"></div>
+          </div>
+        </section>
+
+        <section id="view-crm" class="hidden space-y-4">
+          <div class="glass rounded-2xl p-4">
+            <div class="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <h2 class="text-base font-semibold">CRM Satış Hunisi</h2>
+                <p class="mt-1 text-sm text-zinc-400">Teklifler taslaktan kapanışa kadar aynı listede durur.</p>
+              </div>
+              <div class="text-right">
+                <p class="text-[11px] uppercase tracking-[0.16em] text-zinc-500">Toplam pipeline değeri</p>
+                <p id="pipeline-total" class="font-mono text-2xl text-[#e8c99a]">—</p>
+              </div>
+            </div>
+            <form id="crm-form" class="mt-4 grid gap-2 md:grid-cols-4">
+              <input id="crm-customer" class="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="Müşteri adı" required>
+              <input id="crm-project" class="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="Proje başlığı">
+              <input id="crm-amount" class="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm" type="number" min="0" step="0.01" placeholder="Teklif tutarı" required>
+              <button class="rounded-xl bg-[#e8c99a] px-3 py-2 text-sm font-semibold text-zinc-950" type="submit">Fırsat ekle</button>
+            </form>
+            <p id="crm-note" class="mt-2 text-xs text-zinc-400"></p>
+            <div id="crm-list" class="mt-4 space-y-2"></div>
+          </div>
+        </section>
+
+        <section id="view-office" class="hidden">
+          <div class="iso-shell">
+            <div class="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <p class="iso-kicker">4 DEPARTMAN</p>
+                <h2 class="mt-1 text-base font-semibold">Canlı Sanal Ofis</h2>
+              </div>
+              <div class="iso-capsules" aria-label="Departman özetleri">
+                <button class="iso-capsule" type="button" data-agent="supervisor" style="--room:#e8c99a"><span class="iso-dot"></span>Yönetim</button>
+                <button class="iso-capsule" type="button" data-agent="market" style="--room:#7dd3fc"><span class="iso-dot"></span>Operasyon &amp; Pazar</button>
+                <button class="iso-capsule" type="button" data-agent="rnd" style="--room:#c4b5fd"><span class="iso-dot"></span>Teknoloji &amp; Ar-Ge</button>
+                <button class="iso-capsule" type="button" data-agent="finance" style="--room:#86efac"><span class="iso-dot"></span>Finans &amp; Muhasebe</button>
+              </div>
+            </div>
+            <div id="office-floor" class="iso-canvas">
+              <svg class="iso-svg" viewBox="0 0 1000 620" role="img" aria-label="BCD TECHNOLOGIES izometrik ofis katı">
+                <defs>
+                  <linearGradient id="wall-face" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0" stop-color="#5a4638"/>
+                    <stop offset="1" stop-color="#2a211b"/>
+                  </linearGradient>
+                  <linearGradient id="glass-face" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0" stop-color="#ffffff" stop-opacity="0.34"/>
+                    <stop offset="0.45" stop-color="#d7f1ff" stop-opacity="0.14"/>
+                    <stop offset="1" stop-color="#ffffff" stop-opacity="0.05"/>
+                  </linearGradient>
+                </defs>
+                <ellipse cx="500" cy="470" rx="360" ry="78" fill="#000" opacity="0.35"/>
+                <polygon points="500,88 840,260 840,370 500,198" fill="url(#wall-face)" stroke="#111" stroke-width="3"/>
+                <g transform="translate(668 168) rotate(27)">
+                  <rect x="-138" y="-15" width="276" height="30" rx="3" fill="#140e0b" stroke="#000" stroke-width="1.5"/>
+                  <text x="0" y="5" text-anchor="middle" fill="#f6efe6" font-size="13" font-family="Inter, Segoe UI, sans-serif" font-weight="700" letter-spacing="2.2">BCD TECHNOLOGIES</text>
+                </g>
+                <polygon points="500,198 670,284 330,284" fill="#efd0a4" stroke="#1a120e" stroke-width="2"/>
+                <polygon points="670,284 500,370 330,284" fill="#d7b07a" stroke="#1a120e" stroke-width="2"/>
+                <polygon points="670,284 840,370 500,370" fill="#e7c496" stroke="#1a120e" stroke-width="2"/>
+                <polygon points="840,370 670,456 500,370" fill="#cda56e" stroke="#1a120e" stroke-width="2"/>
+                <polygon points="330,284 500,370 160,370" fill="#e2bc8c" stroke="#1a120e" stroke-width="2"/>
+                <polygon points="500,370 330,456 160,370" fill="#c89a64" stroke="#1a120e" stroke-width="2"/>
+                <polygon points="500,370 670,456 330,456" fill="#f0d2a8" stroke="#1a120e" stroke-width="2"/>
+                <polygon points="670,456 500,542 330,456" fill="#d8b27e" stroke="#1a120e" stroke-width="2"/>
+                <polygon class="iso-glow" data-agent="supervisor" points="500,198 670,284 500,370 330,284" style="--room:#e8c99a"/>
+                <polygon class="iso-glow" data-agent="market" points="670,284 840,370 670,456 500,370" style="--room:#7dd3fc"/>
+                <polygon class="iso-glow" data-agent="rnd" points="330,284 500,370 330,456 160,370" style="--room:#c4b5fd"/>
+                <polygon class="iso-glow" data-agent="finance" points="500,370 670,456 500,542 330,456" style="--room:#86efac"/>
+                <polygon points="670,284 330,456 330,378 670,206" fill="url(#glass-face)" stroke="#111" stroke-width="2.4"/>
+                <polygon points="330,284 670,456 670,378 330,206" fill="url(#glass-face)" stroke="#111" stroke-width="2.4"/>
+                <g class="iso-actor idle" data-agent="supervisor" style="--ink:#e8c99a" transform="translate(500 292)">
+                  <path d="M-46 18 L22 48 L-6 62 L-74 32 Z" fill="#5c3a26" stroke="#1a120e" stroke-width="1.4"/>
+                  <path d="M-36 22 L10 42 L-6 52 L-52 32 Z" fill="#8a5a38"/>
+                  <path d="M-18 -2 L16 14 L12 30 L-22 14 Z" fill="#111" stroke="#000"/>
+                  <path class="iso-screen" d="M-14 2 L12 14 L9 26 L-17 14 Z" fill="#0b1220"/>
+                  <path d="M-8 8 L10 16 L6 24 L-12 16 Z" fill="#3a2a22"/>
+                  <g class="iso-bob">
+                    <path class="iso-body" d="M-12 -6 L8 4 L5 20 L-15 10 Z" fill="#e8c99a"/>
+                    <circle cx="-3" cy="-16" r="8" fill="#f3c7a6"/>
+                    <path class="iso-arm" d="M-18 2 L12 16" stroke="#f3c7a6" stroke-width="4" stroke-linecap="round"/>
+                  </g>
+                </g>
+                <g class="iso-actor idle" data-agent="market" style="--ink:#7dd3fc" transform="translate(678 378)">
+                  <path d="M-46 18 L22 48 L-6 62 L-74 32 Z" fill="#5c3a26" stroke="#1a120e" stroke-width="1.4"/>
+                  <path d="M-36 22 L10 42 L-6 52 L-52 32 Z" fill="#8a5a38"/>
+                  <path d="M-18 -2 L16 14 L12 30 L-22 14 Z" fill="#111" stroke="#000"/>
+                  <path class="iso-screen" d="M-14 2 L12 14 L9 26 L-17 14 Z" fill="#0b1220"/>
+                  <path d="M-8 8 L10 16 L6 24 L-12 16 Z" fill="#3a2a22"/>
+                  <g class="iso-bob">
+                    <path class="iso-body" d="M-12 -6 L8 4 L5 20 L-15 10 Z" fill="#7dd3fc"/>
+                    <circle cx="-3" cy="-16" r="8" fill="#f3c7a6"/>
+                    <path class="iso-arm" d="M-18 2 L12 16" stroke="#f3c7a6" stroke-width="4" stroke-linecap="round"/>
+                  </g>
+                </g>
+                <g class="iso-actor idle" data-agent="rnd" style="--ink:#c4b5fd" transform="translate(338 378)">
+                  <path d="M-46 18 L22 48 L-6 62 L-74 32 Z" fill="#5c3a26" stroke="#1a120e" stroke-width="1.4"/>
+                  <path d="M-36 22 L10 42 L-6 52 L-52 32 Z" fill="#8a5a38"/>
+                  <path d="M-18 -2 L16 14 L12 30 L-22 14 Z" fill="#111" stroke="#000"/>
+                  <path class="iso-screen" d="M-14 2 L12 14 L9 26 L-17 14 Z" fill="#0b1220"/>
+                  <path d="M-8 8 L10 16 L6 24 L-12 16 Z" fill="#3a2a22"/>
+                  <g class="iso-bob">
+                    <path class="iso-body" d="M-12 -6 L8 4 L5 20 L-15 10 Z" fill="#c4b5fd"/>
+                    <circle cx="-3" cy="-16" r="8" fill="#f3c7a6"/>
+                    <path class="iso-arm" d="M-18 2 L12 16" stroke="#f3c7a6" stroke-width="4" stroke-linecap="round"/>
+                  </g>
+                </g>
+                <g class="iso-actor idle" data-agent="finance" style="--ink:#86efac" transform="translate(508 464)">
+                  <path d="M-46 18 L22 48 L-6 62 L-74 32 Z" fill="#5c3a26" stroke="#1a120e" stroke-width="1.4"/>
+                  <path d="M-36 22 L10 42 L-6 52 L-52 32 Z" fill="#8a5a38"/>
+                  <path d="M-18 -2 L16 14 L12 30 L-22 14 Z" fill="#111" stroke="#000"/>
+                  <path class="iso-screen" d="M-14 2 L12 14 L9 26 L-17 14 Z" fill="#0b1220"/>
+                  <path d="M-8 8 L10 16 L6 24 L-12 16 Z" fill="#3a2a22"/>
+                  <g class="iso-bob">
+                    <path class="iso-body" d="M-12 -6 L8 4 L5 20 L-15 10 Z" fill="#86efac"/>
+                    <circle cx="-3" cy="-16" r="8" fill="#f3c7a6"/>
+                    <path class="iso-arm" d="M-18 2 L12 16" stroke="#f3c7a6" stroke-width="4" stroke-linecap="round"/>
+                  </g>
+                </g>
+              </svg>
+              <div class="office-room room-supervisor idle" data-agent="supervisor" data-panel="executive" data-title="Yönetim Odası" data-role="Sistem Yönetici" style="left:33%;top:31.9%;width:34%;height:27.7%;--room:#e8c99a">
+                <button class="room-hit" type="button" aria-label="Yönetim Odası"></button>
+                <button class="role-tag" type="button"><span class="role-dot"></span>Sistem Yönetici</button>
+                <button class="dept-sign" type="button">YÖNETİM</button>
+                <span class="office-bubble hidden" data-bubble>Analiz ediliyor...</span>
+                <span class="office-check hidden" data-check aria-label="Tamamlandı">✓</span>
+                <span class="sr-only" data-badge>Hazır</span>
+              </div>
+              <div class="office-room room-market idle" data-agent="market" data-panel="market" data-title="Operasyon &amp; Pazar" data-role="Satış &amp; CRM" style="left:50%;top:45.8%;width:34%;height:27.7%;--room:#7dd3fc">
+                <button class="room-hit" type="button" aria-label="Operasyon ve Pazar"></button>
+                <button class="role-tag" type="button"><span class="role-dot"></span>Satış &amp; CRM</button>
+                <button class="dept-sign" type="button">OPERASYON &amp; PAZAR</button>
+                <span class="office-bubble hidden" data-bubble>Pazar okunuyor...</span>
+                <span class="office-check hidden" data-check aria-label="Tamamlandı">✓</span>
+                <span class="sr-only" data-badge>Hazır</span>
+              </div>
+              <div class="office-room room-rnd idle" data-agent="rnd" data-panel="rnd" data-title="Teknik Ar-Ge Lab" data-role="Yazılım Mimarı" style="left:16%;top:45.8%;width:34%;height:27.7%;--room:#c4b5fd">
+                <button class="room-hit" type="button" aria-label="Teknik Ar-Ge Lab"></button>
+                <button class="role-tag" type="button"><span class="role-dot"></span>Yazılım Mimarı</button>
+                <button class="dept-sign" type="button">TEKNOLOJİ &amp; AR-GE</button>
+                <span class="office-bubble hidden" data-bubble>Mimari inceleniyor...</span>
+                <span class="office-check hidden" data-check aria-label="Tamamlandı">✓</span>
+                <span class="sr-only" data-badge>Hazır</span>
+              </div>
+              <div class="office-room room-finance idle" data-agent="finance" data-panel="finance" data-title="Muhasebe &amp; Finans" data-role="Muhasebeci" style="left:33%;top:59.7%;width:34%;height:27.7%;--room:#86efac">
+                <button class="room-hit" type="button" aria-label="Muhasebe ve Finans"></button>
+                <button class="role-tag" type="button"><span class="role-dot"></span>Muhasebeci</button>
+                <button class="dept-sign" type="button">FİNANS &amp; MUHASEBE</button>
+                <span class="office-bubble hidden" data-bubble>Maliyet hesaplanıyor...</span>
+                <span class="office-check hidden" data-check aria-label="Tamamlandı">✓</span>
+                <span class="sr-only" data-badge>Hazır</span>
+              </div>
+              <span id="office-packet" class="office-packet hidden">Belge</span>
+            </div>
+            <form id="office-task" class="iso-dock">
+              <input id="office-task-text" type="text" placeholder="Ekibine bir görev ver..." aria-label="Ekibine bir görev ver..." required>
+              <select id="office-task-target" aria-label="Kime">
+                <option value="">Kime: Sistem Yönetici karar versin</option>
+                <option value="market">Operasyon &amp; Pazar</option>
+                <option value="rnd">Teknoloji &amp; Ar-Ge</option>
+                <option value="finance">Finans &amp; Muhasebe</option>
+              </select>
+              <button id="office-run" class="rounded-xl bg-[#e8c99a] px-4 py-2 text-sm font-semibold text-zinc-950 disabled:opacity-50" type="submit">Çalıştır</button>
+            </form>
+          </div>
+        </section>
+      </main>
+
+      <aside class="border-l border-white/10 p-4">
+        <p class="text-[11px] uppercase tracking-[0.16em] text-[#e8c99a]">Canlı finans defteri</p>
+        <p id="totals" class="mt-2 font-mono text-xs text-zinc-400"></p>
+        <div class="glass mt-3 rounded-2xl p-3">
+          <canvas id="expense-chart" height="180"></canvas>
+          <p id="chart-empty" class="hidden py-8 text-center text-sm text-zinc-500">Grafik için tutarlı gider yok.</p>
+        </div>
+        <div id="fixed-list" class="mt-4"></div>
+        <div id="project-list" class="mt-4"></div>
+        <div id="income-list" class="mt-4"></div>
+        <form id="expense-form" class="mt-5 space-y-2">
+          <p class="text-[11px] uppercase tracking-[0.16em] text-zinc-500">Yeni gider</p>
+          <input id="expense-name" class="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="Gider adı" required>
+          <input id="expense-amount" class="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm" type="number" min="0" step="0.01" placeholder="Aylık tutar" required>
+          <select id="expense-category" class="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm">
+            <option value="sabit">Sabit gider</option>
+            <option value="teknoloji">Teknoloji / altyapı</option>
+          </select>
+          <input id="expense-project" class="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="Proje (boşsa sabit gider)">
+          <button class="w-full rounded-xl border border-[#e8c99a]/40 px-3 py-2 text-sm" type="submit">Deftere ekle</button>
+          <p id="expense-note" class="text-xs text-zinc-400"></p>
+        </form>
+      </aside>
+    </div>
+  </div>
+
+  <div id="pdf-crm-modal" class="hidden fixed inset-0 z-20 grid place-items-center bg-black/70 p-4">
+    <div class="glass w-full max-w-md rounded-2xl p-5" role="dialog" aria-modal="true" aria-labelledby="pdf-crm-title">
+      <h2 id="pdf-crm-title" class="text-base font-semibold">PDF hazır</h2>
+      <p class="mt-1 text-sm text-zinc-400">Teklifi CRM hunisine Taslak veya Gönderildi olarak kaydedebilirsiniz.</p>
+      <label class="mt-4 block text-[11px] uppercase tracking-[0.14em] text-zinc-500" for="pdf-crm-customer">Müşteri adı</label>
+      <input id="pdf-crm-customer" class="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm">
+      <label class="mt-3 block text-[11px] uppercase tracking-[0.14em] text-zinc-500" for="pdf-crm-amount">Teklif tutarı</label>
+      <input id="pdf-crm-amount" class="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm" type="number" min="0" step="0.01" placeholder="Teklif tutarı">
+      <label class="mt-3 block text-[11px] uppercase tracking-[0.14em] text-zinc-500" for="pdf-crm-status">Durum</label>
+      <select id="pdf-crm-status" class="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm">
+        <option>Taslak</option>
+        <option>Gönderildi</option>
+      </select>
+      <div class="mt-4 flex flex-wrap gap-2">
+        <button id="pdf-save-crm" class="rounded-xl bg-[#e8c99a] px-4 py-2 text-sm font-semibold text-zinc-950" type="button">CRM Hunisine Kaydet</button>
+        <button id="pdf-close-crm" class="rounded-xl border border-white/10 px-4 py-2 text-sm" type="button">Kapat</button>
+      </div>
+      <p id="pdf-crm-note" class="mt-2 text-xs text-zinc-400"></p>
+    </div>
+  </div>
+
+  <div id="email-modal" class="hidden fixed inset-0 z-20 grid place-items-center bg-black/70 p-4">
+    <div class="glass max-h-[90vh] w-full max-w-2xl overflow-auto rounded-2xl p-5" role="dialog" aria-modal="true" aria-labelledby="email-title">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <h2 id="email-title" class="text-base font-semibold">Müşteri teklif e-postası</h2>
+          <p id="email-project" class="mt-1 text-xs text-zinc-500"></p>
+        </div>
+        <button id="close-email" class="rounded-lg border border-white/10 px-3 py-1 text-xs" type="button">Kapat</button>
+      </div>
+      <label class="mt-4 block text-[11px] uppercase tracking-[0.14em] text-zinc-500" for="email-profile">Hedef müşteri profili</label>
+      <textarea id="email-profile" rows="2" class="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm outline-none" placeholder="Örnek: Ankara Büyükşehir Belediyesi bilgi işlem müdürlüğü"></textarea>
+      <button id="create-email" class="mt-3 rounded-xl bg-[#e8c99a] px-4 py-2 text-sm font-semibold text-zinc-950 disabled:opacity-50" type="button">Oluştur</button>
+      <p id="email-status" class="mt-2 text-xs text-zinc-400"></p>
+      <label class="mt-4 block text-[11px] uppercase tracking-[0.14em] text-zinc-500" for="email-subject">Konu</label>
+      <input id="email-subject" class="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm">
+      <label class="mt-3 block text-[11px] uppercase tracking-[0.14em] text-zinc-500" for="email-body">Gövde</label>
+      <textarea id="email-body" rows="10" class="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm"></textarea>
+      <div class="mt-4 flex flex-wrap gap-2">
+        <button id="copy-email" class="rounded-xl border border-white/10 px-4 py-2 text-sm" type="button">Kopyala</button>
+        <a id="open-mailto" class="rounded-xl border border-[#e8c99a]/40 px-4 py-2 text-sm" href="mailto:">E-posta Uygulamasında Aç</a>
+      </div>
+      <div class="mt-4 border-t border-white/10 pt-4">
+        <p class="text-[11px] uppercase tracking-[0.14em] text-zinc-500">CRM hunisine kaydet</p>
+        <div class="mt-2 flex flex-wrap items-center gap-2">
+          <input id="email-crm-amount" class="w-36 rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm" type="number" min="0" step="0.01" placeholder="Teklif tutarı">
+          <select id="email-crm-status" class="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm">
+            <option>Taslak</option>
+            <option>Gönderildi</option>
+          </select>
+          <button id="email-save-crm" class="rounded-xl border border-[#e8c99a]/40 px-4 py-2 text-sm" type="button">CRM Hunisine Kaydet</button>
+        </div>
+        <p id="email-crm-note" class="mt-2 text-xs text-zinc-400"></p>
+      </div>
+    </div>
+  </div>
+
+  <div id="office-modal" class="hidden fixed inset-0 z-30 grid place-items-center bg-black/70 p-4">
+    <div class="glass max-h-[90vh] w-full max-w-lg overflow-auto rounded-2xl p-5" role="dialog" aria-modal="true" aria-labelledby="office-modal-title">
+      <h2 id="office-modal-title" class="text-base font-semibold">Yönetim Odası</h2>
+      <p id="office-modal-role" class="mt-1 text-sm text-zinc-400"></p>
+      <h3 class="mt-4 text-[11px] uppercase tracking-[0.14em] text-zinc-500">Son çıktı</h3>
+      <article id="office-output" class="md mt-2 max-h-48 overflow-auto text-sm"></article>
+      <label class="mt-4 block text-[11px] uppercase tracking-[0.14em] text-zinc-500" for="office-directive">Sistem direktifi</label>
+      <textarea id="office-directive" class="mt-2 h-28 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm outline-none"></textarea>
+      <label class="mt-3 block text-[11px] uppercase tracking-[0.14em] text-zinc-500" for="office-temperature">Sıcaklık <span id="office-temp-read" class="font-mono text-[#e8c99a]">0.0</span></label>
+      <input id="office-temperature" class="mt-2 w-full" type="range" min="0" max="2" step="0.1" value="0">
+      <div class="mt-4 flex flex-wrap gap-2">
+        <button id="office-save" class="rounded-xl bg-[#e8c99a] px-4 py-2 text-sm font-semibold text-zinc-950" type="button">Direktif kaydet</button>
+        <button id="office-close" class="rounded-xl border border-white/10 px-4 py-2 text-sm" type="button">Kapat</button>
+      </div>
+      <p id="office-modal-note" class="mt-2 text-xs text-zinc-400"></p>
+    </div>
+  </div>
+
+  <script>
+    const NODES = [
+      { id: "supervisor", label: "Yönetici" },
+      { id: "market", label: "Operasyon & Pazar" },
+      { id: "rnd", label: "Teknik Ar-Ge" },
+      { id: "finance", label: "Muhasebe" }
+    ];
+    const PANELS = [
+      ["executive", "Yönetici Özeti"],
+      ["market", "Operasyon & Pazar"],
+      ["rnd", "Teknik & Ar-Ge"],
+      ["finance", "Muhasebe & Finans"]
+    ];
+    const flow = Object.fromEntries(NODES.map((node) => [node.id, { status: "idle", tools: [], duration: null }]));
+    const sections = { executive: "", market: "", rnd: "", finance: "" };
+    let active = "executive";
+    let currentProject = "";
+    let officeFocus = "";
+    let officeAgents = [];
+    let chart;
+    let sessionId = localStorage.getItem("bcd-session");
+    if (!sessionId) {
+      sessionId = generateId().replace(/-/g, "").slice(0, 16);
+      localStorage.setItem("bcd-session", sessionId);
+    }
+    document.getElementById("session").textContent = "Oturum " + sessionId;
+
+    function icons() {
+      if (window.lucide) lucide.createIcons();
+    }
+
+    function generateId() {
+      if (window.crypto && typeof crypto.randomUUID === "function") return crypto.randomUUID();
+      const bytes = new Uint8Array(16);
+      if (window.crypto && typeof crypto.getRandomValues === "function") crypto.getRandomValues(bytes);
+      else {
+        for (let index = 0; index < bytes.length; index += 1) bytes[index] = Math.floor((Date.now() + Math.random() * 256) % 256);
+      }
+      bytes[6] = (bytes[6] & 15) | 64;
+      bytes[8] = (bytes[8] & 63) | 128;
+      const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+      return hex.slice(0, 8) + "-" + hex.slice(8, 12) + "-" + hex.slice(12, 16) + "-" + hex.slice(16, 20) + "-" + hex.slice(20);
+    }
+
+    function apiFetch(path, options) {
+      const url = new URL(path, window.location.href);
+      url.username = "";
+      url.password = "";
+      return fetch(url.href, Object.assign({}, options || {}, { credentials: "same-origin" }));
+    }
+
+    function money(value) {
+      return new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 0 }).format(Number(value) || 0) + " TL";
+    }
+
+    function duration(ms) {
+      if (ms === null || ms === undefined) return "";
+      if (ms < 1000) return ms + " ms";
+      return (ms / 1000).toFixed(1) + " sn";
+    }
+
+    function renderPipeline() {
+      const list = document.getElementById("pipeline");
+      list.replaceChildren();
+      NODES.forEach((node) => {
+        const state = flow[node.id];
+        const item = document.createElement("li");
+        item.className = "node rounded-2xl border border-white/10 bg-black/20 p-3 " + state.status;
+        const title = document.createElement("p");
+        title.className = "text-sm font-medium";
+        if (state.status === "running") {
+          const dot = document.createElement("span");
+          dot.className = "live-dot";
+          dot.setAttribute("aria-hidden", "true");
+          title.appendChild(dot);
+        }
+        title.append(node.label);
+        const meta = document.createElement("p");
+        meta.className = "mt-1 font-mono text-[11px] uppercase tracking-wide text-zinc-500";
+        const label = state.status === "running" ? "çalışıyor" : state.status === "done" ? "tamam" : state.status === "skipped" ? "atlandı" : "bekliyor";
+        meta.textContent = state.duration === null ? label : label + " · " + duration(state.duration);
+        item.append(title, meta);
+        state.tools.forEach((tool) => {
+          const chip = document.createElement("span");
+          chip.className = "mt-2 mr-1 inline-block rounded-full border border-[#e8c99a]/30 px-2 py-0.5 font-mono text-[10px] text-[#e8c99a]";
+          chip.textContent = tool;
+          item.appendChild(chip);
+        });
+        list.appendChild(item);
+      });
+      paintOffice();
+    }
+
+    function paintOffice() {
+      const labels = { idle: "Hazır", running: "Çalışıyor", done: "Tamamlandı", skipped: "Atlandı" };
+      document.querySelectorAll(".office-room, .iso-capsule, .iso-actor, .iso-glow").forEach((node) => {
+        const state = flow[node.dataset.agent] || { status: "idle" };
+        const status = state.status || "idle";
+        node.classList.remove("idle", "running", "done", "skipped");
+        node.classList.add(status);
+        const badge = node.querySelector("[data-badge]");
+        if (badge) badge.textContent = labels[status] || "Hazır";
+        node.querySelector("[data-bubble]")?.classList.toggle("hidden", status !== "running");
+        node.querySelector("[data-check]")?.classList.toggle("hidden", status !== "done");
+      });
+    }
+
+    function playHandoff(fromId, toId) {
+      const floor = document.getElementById("office-floor");
+      const from = floor.querySelector('[data-agent="' + fromId + '"]');
+      const to = floor.querySelector('[data-agent="' + toId + '"]');
+      const packet = document.getElementById("office-packet");
+      if (!from || !to || !packet) return;
+      const base = floor.getBoundingClientRect();
+      if (!base.width || !base.height) return;
+      const start = from.getBoundingClientRect();
+      const end = to.getBoundingClientRect();
+      const x1 = start.left + start.width / 2 - base.left;
+      const y1 = start.top + start.height / 2 - base.top;
+      const x2 = end.left + end.width / 2 - base.left;
+      const y2 = end.top + end.height / 2 - base.top;
+      packet.classList.remove("hidden");
+      packet.style.left = x1 + "px";
+      packet.style.top = y1 + "px";
+      const motion = packet.animate(
+        [
+          { transform: "translate(-50%, -50%)" },
+          { transform: "translate(calc(-50% + " + (x2 - x1) + "px), calc(-50% + " + (y2 - y1) + "px))" }
+        ],
+        { duration: 720, easing: "cubic-bezier(.2,.8,.2,1)" }
+      );
+      motion.onfinish = () => packet.classList.add("hidden");
+    }
+
+    function resetFlow() {
+      NODES.forEach((node) => {
+        flow[node.id] = { status: node.id === "supervisor" ? "running" : "idle", tools: [], duration: null };
+      });
+      document.getElementById("flow-note").textContent = "Yönetici isteği ayırıyor";
+      renderPipeline();
+      updateProgress();
+    }
+
+    function updateProgress() {
+      const box = document.getElementById("run-progress");
+      const active = NODES.filter((node) => flow[node.id].status === "running" || flow[node.id].status === "done");
+      const done = active.filter((node) => flow[node.id].status === "done").length;
+      const running = NODES.find((node) => flow[node.id].status === "running");
+      const total = Math.max(active.length, 1);
+      const percent = active.length ? Math.round((done / total) * 100) : 0;
+      box.classList.toggle("hidden", active.length === 0);
+      box.setAttribute("aria-valuemax", String(total));
+      box.setAttribute("aria-valuenow", String(done));
+      document.getElementById("run-progress-bar").style.width = percent + "%";
+      document.getElementById("run-progress-count").textContent = done + "/" + total;
+      document.getElementById("run-progress-label").textContent = running
+        ? running.label + " çalışıyor"
+        : done ? "Tamamlandı" : "Hazır";
+    }
+
+    function noteTool(name, department) {
+      const known = Object.values(flow).some((item) => item.tools.includes(name));
+      if (known) return;
+      const target = flow[department] || flow.supervisor;
+      target.tools.push(name);
+      if (target.status === "idle") target.status = "done";
+      renderPipeline();
+      updateProgress();
+    }
+
+    function markdown(text) {
+      const source = (text || "").trim();
+      if (!source) return "<p class='text-zinc-500'>Bu bölüm için henüz çıktı yok.</p>";
+      const html = window.marked ? marked.parse(source) : "<pre>" + source.replace(/[&<>]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[ch])) + "</pre>";
+      return window.DOMPurify ? DOMPurify.sanitize(html) : html;
+    }
+
+    function showPanel() {
+      document.querySelectorAll(".tab").forEach((button) => {
+        const on = button.dataset.panel === active;
+        button.className = "tab rounded-lg px-3 py-1.5 text-sm " + (on ? "bg-white/10 text-white" : "text-zinc-400");
+      });
+      document.getElementById("report").innerHTML = markdown(sections[active]);
+      document.getElementById("email-launch").classList.toggle("hidden", active !== "market");
+    }
+
+    function applySections(next) {
+      PANELS.forEach(([key]) => { sections[key] = (next && next[key]) || ""; });
+      if (!sections[active]) {
+        active = PANELS.find(([key]) => sections[key])?.[0] || "executive";
+      }
+      showPanel();
+    }
+
+    function fullReport() {
+      return PANELS.map(([key, title]) => "# " + title + "\n\n" + (sections[key] || "")).join("\n\n");
+    }
+
+    async function loadHealth() {
+      const badge = document.getElementById("model-badge");
+      try {
+        const response = await apiFetch("/api/health");
+        if (!response.ok) throw new Error("GET /api/health " + response.status);
+        const health = await response.json();
+        const live = health.llm_configured ? health.model : "mock";
+        badge.innerHTML = '<span class="h-1.5 w-1.5 rounded-full ' + (health.llm_configured ? "bg-emerald-400" : "bg-zinc-500") + '"></span><span>' + live + "</span>";
+      } catch (error) {
+        console.error("Model rozeti yüklenemedi", error);
+        badge.lastElementChild.textContent = "mock";
+      }
+    }
+
+    async function loadProjects() {
+      const box = document.getElementById("projects");
+      let projects;
+      try {
+        const response = await apiFetch("/api/projects");
+        if (!response.ok) throw new Error("GET /api/projects " + response.status);
+        projects = await response.json();
+      } catch (error) {
+        console.error("Projeler yüklenemedi", error);
+        return;
+      }
+      box.replaceChildren();
+      if (!projects.length) {
+        const empty = document.createElement("p");
+        empty.className = "text-sm text-zinc-500";
+        empty.textContent = "Kayıtlı proje yok.";
+        box.appendChild(empty);
+        return;
+      }
+      projects.forEach((project) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "w-full rounded-xl border border-white/10 px-3 py-2 text-left hover:border-[#e8c99a]/50";
+        const name = document.createElement("span");
+        name.className = "block font-medium";
+        name.textContent = project.owner + "/" + project.repo;
+        const about = document.createElement("span");
+        about.className = "mt-1 block text-xs text-zinc-500";
+        about.textContent = project.description || "Açıklama yok";
+        button.append(name, about);
+        button.addEventListener("click", () => openProject(project.slug));
+        box.appendChild(button);
+      });
+    }
+
+    async function openProject(slug) {
+      document.getElementById("flow-note").textContent = "Kayıtlı analiz";
+      const response = await apiFetch("/api/projects/" + encodeURIComponent(slug));
+      if (!response.ok) return;
+      const body = await response.json();
+      currentProject = body.project.owner + "/" + body.project.repo;
+      applySections(body.sections);
+      showView("command");
+    }
+
+    function rowCard(row) {
+      const card = document.createElement("div");
+      card.className = "border-b border-white/10 py-2";
+      const line = document.createElement("div");
+      line.className = "flex items-start justify-between gap-2";
+      const label = document.createElement("div");
+      const name = document.createElement("p");
+      name.className = "text-sm";
+      name.textContent = row.project ? row.project + " · " + row.name : row.name;
+      const meta = document.createElement("p");
+      meta.className = "font-mono text-[11px] text-zinc-500";
+      meta.textContent = row.category || "gider";
+      label.append(name, meta);
+      const amount = document.createElement("p");
+      amount.className = "font-mono text-sm";
+      amount.textContent = money(row.amount);
+      line.append(label, amount);
+      const actions = document.createElement("div");
+      actions.className = "mt-1 flex gap-2";
+      const edit = document.createElement("button");
+      edit.type = "button";
+      edit.className = "text-[11px] text-zinc-400";
+      edit.textContent = "Düzenle";
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "text-[11px] text-rose-300";
+      remove.textContent = "Sil";
+      edit.addEventListener("click", () => editRow(card, row));
+      remove.addEventListener("click", () => removeExpense(row.id));
+      actions.append(edit, remove);
+      card.append(line, actions);
+      return card;
+    }
+
+    function editRow(card, row) {
+      card.replaceChildren();
+      const form = document.createElement("form");
+      form.className = "space-y-2";
+      const name = document.createElement("input");
+      name.value = row.name;
+      name.className = "w-full rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-sm";
+      const amount = document.createElement("input");
+      amount.type = "number";
+      amount.min = "0";
+      amount.step = "0.01";
+      amount.value = row.amount;
+      amount.className = name.className;
+      const save = document.createElement("button");
+      save.type = "submit";
+      save.className = "text-[11px] text-[#e8c99a]";
+      save.textContent = "Kaydet";
+      form.append(name, amount, save);
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const response = await apiFetch("/api/expenses/" + encodeURIComponent(row.id), {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name: name.value, amount: Number(amount.value) })
+        });
+        if (response.ok) await loadLedger();
+      });
+      card.appendChild(form);
+    }
+
+    async function removeExpense(id) {
+      const response = await apiFetch("/api/expenses/" + encodeURIComponent(id), { method: "DELETE" });
+      if (response.ok) await loadLedger();
+    }
+
+    function renderChart(rows) {
+      const canvas = document.getElementById("expense-chart");
+      const empty = document.getElementById("chart-empty");
+      const items = rows.filter((row) => Number(row.amount) > 0);
+      if (chart) {
+        chart.destroy();
+        chart = null;
+      }
+      if (!items.length || !window.Chart) {
+        canvas.classList.add("hidden");
+        empty.classList.remove("hidden");
+        return;
+      }
+      canvas.classList.remove("hidden");
+      empty.classList.add("hidden");
+      const colors = ["#e8c99a", "#7dd3fc", "#c4b5fd", "#86efac", "#fda4af", "#fcd34d", "#93c5fd", "#f9a8d4"];
+      chart = new Chart(canvas, {
+        type: "doughnut",
+        data: {
+          labels: items.map((row) => row.project ? row.project + " · " + row.name : row.name),
+          datasets: [{ data: items.map((row) => row.amount), backgroundColor: items.map((_, index) => colors[index % colors.length]), borderWidth: 0 }]
+        },
+        options: {
+          plugins: { legend: { position: "bottom", labels: { color: "#d4d4d8", boxWidth: 10, font: { family: "Inter", size: 11 } } } },
+          cutout: "68%"
+        }
+      });
+    }
+
+    function fillList(id, title, rows) {
+      const box = document.getElementById(id);
+      box.replaceChildren();
+      const heading = document.createElement("p");
+      heading.className = "text-[11px] uppercase tracking-[0.14em] text-zinc-500";
+      heading.textContent = title;
+      box.appendChild(heading);
+      if (!rows.length) {
+        const empty = document.createElement("p");
+        empty.className = "mt-2 text-sm text-zinc-500";
+        empty.textContent = "Kayıt yok.";
+        box.appendChild(empty);
+        return;
+      }
+      rows.forEach((row) => box.appendChild(rowCard(row)));
+    }
+
+    async function loadLedger() {
+      let ledger;
+      try {
+        const response = await apiFetch("/api/expenses");
+        if (!response.ok) throw new Error("GET /api/expenses " + response.status);
+        ledger = await response.json();
+      } catch (error) {
+        console.error("Finans defteri yüklenemedi", error);
+        return;
+      }
+      document.getElementById("kpi-total").textContent = money(ledger.monthly_total ?? (ledger.fixed_total + ledger.project_total));
+      document.getElementById("kpi-fixed").textContent = money(ledger.fixed_total);
+      document.getElementById("kpi-profit").textContent = money(ledger.target_profit || 0);
+      document.getElementById("kpi-income").textContent = "Gerçekleşen gelir " + money(ledger.realized_income || 0);
+      document.getElementById("totals").textContent = "Sabit " + money(ledger.fixed_total) + " · Proje " + money(ledger.project_total) + " · Gelir " + money(ledger.realized_income || 0);
+      fillList("fixed-list", "Sabit giderler", ledger.fixed_monthly);
+      fillList("project-list", "Proje maliyetleri", ledger.project_costs);
+      fillIncome(ledger.income || []);
+      renderChart([].concat(ledger.fixed_monthly, ledger.project_costs));
+    }
+
+    async function runCommand(message, options) {
+      const keepOffice = Boolean(options && options.keepOffice);
+      const buttons = [document.getElementById("run"), document.getElementById("office-run")].filter(Boolean);
+      buttons.forEach((button) => { button.disabled = true; });
+      const repo = message.match(/github\.com\/([\w.-]+\/[\w.-]+)/i);
+      if (repo) currentProject = repo[1];
+      resetFlow();
+      if (!keepOffice) showView("command");
+      try {
+        const response = await apiFetch("/api/chat/stream", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ message, session_id: sessionId })
+        });
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        while (true) {
+          const chunk = await reader.read();
+          if (chunk.done) break;
+          buffer += decoder.decode(chunk.value, { stream: true });
+          const blocks = buffer.split("\n\n");
+          buffer = blocks.pop() || "";
+          blocks.forEach((block) => {
+            const line = block.split("\n").find((item) => item.startsWith("data:"));
+            if (!line) return;
+            const event = JSON.parse(line.slice(5).trim());
+            if (event.phase === "agent" && flow[event.id]) {
+              const running = event.status === "running";
+              if (running && officeFocus && officeFocus !== event.id) playHandoff(officeFocus, event.id);
+              if (running) officeFocus = event.id;
+              flow[event.id] = {
+                status: running ? "running" : "done",
+                tools: event.tools || flow[event.id].tools || [],
+                duration: running ? null : event.duration_ms
+              };
+              document.getElementById("flow-note").textContent = event.label + (running ? " çalışıyor" : " tamam");
+              renderPipeline();
+              updateProgress();
+            }
+            if (event.phase === "section" && Object.prototype.hasOwnProperty.call(sections, event.section)) {
+              sections[event.section] = event.text || "";
+              if (!sections[active]) active = event.section;
+              showPanel();
+              if (event.summary) document.getElementById("flow-note").textContent = event.summary.split("\n")[0];
+            }
+            if (event.phase === "tool") noteTool(event.tool, event.department);
+            if (event.phase === "done") {
+              document.getElementById("flow-note").textContent = (event.department || "rapor") + " · " + event.mode;
+              applySections(event.sections);
+              if (Array.isArray(event.trace)) {
+                event.trace.forEach((step) => {
+                  if (flow[step.id]) flow[step.id] = { status: "done", tools: step.tools || [], duration: step.duration_ms };
+                });
+              }
+              NODES.forEach((node) => {
+                if (flow[node.id].status === "idle") flow[node.id].status = "skipped";
+              });
+              renderPipeline();
+              updateProgress();
+            }
+          });
+        }
+      } catch (error) {
+        document.getElementById("flow-note").textContent = "İstek tamamlanamadı";
+        sections.executive = "Komut çalıştırılamadı.";
+        showPanel();
+      } finally {
+        buttons.forEach((button) => { button.disabled = false; });
+      }
+    }
+
+    function fillIncome(rows) {
+      const box = document.getElementById("income-list");
+      box.replaceChildren();
+      const heading = document.createElement("p");
+      heading.className = "text-[11px] uppercase tracking-[0.14em] text-zinc-500";
+      heading.textContent = "Gerçekleşen gelir";
+      box.appendChild(heading);
+      if (!rows.length) {
+        const empty = document.createElement("p");
+        empty.className = "mt-2 text-sm text-zinc-500";
+        empty.textContent = "Kazanılan teklif yok.";
+        box.appendChild(empty);
+        return;
+      }
+      rows.forEach((row) => {
+        const line = document.createElement("div");
+        line.className = "flex items-start justify-between gap-2 border-b border-white/10 py-2";
+        const name = document.createElement("p");
+        name.className = "text-sm";
+        name.textContent = row.name;
+        const amount = document.createElement("p");
+        amount.className = "font-mono text-sm text-emerald-300";
+        amount.textContent = "+" + money(row.amount);
+        line.append(name, amount);
+        box.appendChild(line);
+      });
+    }
+
+    const CRM_STATUSES = ["Taslak", "Gönderildi", "Görüşmede", "Kazanıldı", "Kaybedildi"];
+    const CRM_COLORS = {
+      "Taslak": "border-white/20 text-zinc-300",
+      "Gönderildi": "border-sky-400/40 text-sky-200",
+      "Görüşmede": "border-amber-300/40 text-amber-200",
+      "Kazanıldı": "border-emerald-400/40 text-emerald-200",
+      "Kaybedildi": "border-rose-400/40 text-rose-200"
+    };
+
+    function dealCard(deal) {
+      const card = document.createElement("article");
+      card.className = "rounded-2xl border border-white/10 p-3";
+      const top = document.createElement("div");
+      top.className = "flex flex-wrap items-start justify-between gap-2";
+      const title = document.createElement("div");
+      const name = document.createElement("p");
+      name.className = "text-sm font-medium";
+      name.textContent = deal.musteri_adi;
+      const project = document.createElement("p");
+      project.className = "text-xs text-zinc-500";
+      project.textContent = deal.proje_basligi || "Proje başlığı yok";
+      title.append(name, project);
+      const badge = document.createElement("span");
+      badge.className = "rounded-full border px-2 py-0.5 text-[11px] " + (CRM_COLORS[deal.durum] || "");
+      badge.textContent = deal.durum;
+      top.append(title, badge);
+      const meta = document.createElement("p");
+      meta.className = "mt-2 font-mono text-sm";
+      meta.textContent = money(deal.teklif_tutari) + " " + (deal.para_birimi || "TRY");
+      const actions = document.createElement("div");
+      actions.className = "mt-2 flex flex-wrap items-center gap-2";
+      const select = document.createElement("select");
+      select.className = "rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs";
+      select.setAttribute("aria-label", deal.musteri_adi + " durumu");
+      CRM_STATUSES.forEach((status) => {
+        const option = document.createElement("option");
+        option.value = status;
+        option.textContent = status;
+        option.selected = status === deal.durum;
+        select.appendChild(option);
+      });
+      select.addEventListener("change", async () => {
+        const response = await apiFetch("/api/crm/" + encodeURIComponent(deal.id), {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ durum: select.value })
+        });
+        if (response.ok) {
+          await loadCrm();
+          await loadLedger();
+        }
+      });
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "text-[11px] text-rose-300";
+      remove.textContent = "Sil";
+      remove.addEventListener("click", async () => {
+        const response = await apiFetch("/api/crm/" + encodeURIComponent(deal.id), { method: "DELETE" });
+        if (response.ok) {
+          await loadCrm();
+          await loadLedger();
+        }
+      });
+      actions.append(select, remove);
+      card.append(top, meta, actions);
+      return card;
+    }
+
+    async function loadCrm() {
+      let body;
+      try {
+        const response = await apiFetch("/api/crm");
+        if (!response.ok) throw new Error("GET /api/crm " + response.status);
+        body = await response.json();
+      } catch (error) {
+        console.error("CRM hunisi yüklenemedi", error);
+        return;
+      }
+      const suffix = body.pipeline_currency && body.pipeline_currency !== "TRY" ? " " + body.pipeline_currency : "";
+      document.getElementById("pipeline-total").textContent = money(body.pipeline_total) + suffix;
+      const list = document.getElementById("crm-list");
+      list.replaceChildren();
+      if (!body.opportunities.length) {
+        const empty = document.createElement("p");
+        empty.className = "text-sm text-zinc-500";
+        empty.textContent = "Henüz fırsat yok.";
+        list.appendChild(empty);
+        return;
+      }
+      body.opportunities.forEach((deal) => list.appendChild(dealCard(deal)));
+    }
+
+    async function saveOpportunity(fields) {
+      const response = await apiFetch("/api/crm", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(fields)
+      });
+      const body = await response.json();
+      if (!response.ok) {
+        const detail = body.detail;
+        throw new Error(typeof detail === "string" ? detail : "CRM kaydı yazılamadı.");
+      }
+      await loadLedger();
+      return body;
+    }
+
+    function showView(name) {
+      document.getElementById("view-command").classList.toggle("hidden", name !== "command");
+      document.getElementById("view-studio").classList.toggle("hidden", name !== "studio");
+      document.getElementById("view-crm").classList.toggle("hidden", name !== "crm");
+      document.getElementById("view-office").classList.toggle("hidden", name !== "office");
+      const on = "rounded-xl bg-[#e8c99a] px-3 py-2 text-sm font-medium text-zinc-950";
+      const off = "rounded-xl border border-white/10 px-3 py-2 text-sm text-zinc-300";
+      document.getElementById("nav-command").className = name === "command" ? on : off;
+      document.getElementById("nav-office").className = name === "office" ? on : off;
+      document.getElementById("nav-crm").className = name === "crm" ? on : off;
+      document.getElementById("nav-studio").className = name === "studio" ? on : off;
+      if (name === "studio") loadStudio();
+      if (name === "crm") loadCrm();
+    }
+
+    async function loadStudio() {
+      let config;
+      let memory;
+      try {
+        const configResponse = await apiFetch("/api/agents/config");
+        if (!configResponse.ok) throw new Error("GET /api/agents/config " + configResponse.status);
+        const memoryResponse = await apiFetch("/api/memory");
+        if (!memoryResponse.ok) throw new Error("GET /api/memory " + memoryResponse.status);
+        config = await configResponse.json();
+        memory = await memoryResponse.json();
+      } catch (error) {
+        console.error("Ajan ayarları yüklenemedi", error);
+        return;
+      }
+      const box = document.getElementById("directive-forms");
+      box.replaceChildren();
+      config.agents.forEach((agent) => {
+        const card = document.createElement("article");
+        card.className = "rounded-2xl border border-white/10 p-3";
+        card.dataset.id = agent.id;
+        const heading = document.createElement("div");
+        heading.className = "flex items-center justify-between gap-3";
+        const title = document.createElement("h3");
+        title.className = "text-sm font-medium";
+        title.textContent = agent.name;
+        const temp = document.createElement("span");
+        temp.className = "temp-read font-mono text-xs text-[#e8c99a]";
+        temp.textContent = "temperature " + Number(agent.temperature).toFixed(1);
+        heading.append(title, temp);
+        const area = document.createElement("textarea");
+        area.className = "directive mt-2 h-28 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm outline-none";
+        area.value = agent.directive;
+        const range = document.createElement("input");
+        range.type = "range";
+        range.min = "0";
+        range.max = "2";
+        range.step = "0.1";
+        range.value = agent.temperature;
+        range.className = "temperature mt-3 w-full";
+        range.addEventListener("input", () => { temp.textContent = "temperature " + Number(range.value).toFixed(1); });
+        card.append(heading, area, range);
+        box.appendChild(card);
+      });
+      const list = document.getElementById("memory-list");
+      list.replaceChildren();
+      if (!memory.notes.length) {
+        const empty = document.createElement("p");
+        empty.className = "text-sm text-zinc-500";
+        empty.textContent = "Henüz şirket hafızası yok.";
+        list.appendChild(empty);
+        return;
+      }
+      memory.notes.forEach((note) => {
+        const row = document.createElement("div");
+        row.className = "flex items-start justify-between gap-3 rounded-xl border border-white/10 px-3 py-2";
+        const text = document.createElement("p");
+        text.textContent = note.text;
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "text-[11px] text-rose-300";
+        remove.textContent = "Sil";
+        remove.addEventListener("click", async () => {
+          await apiFetch("/api/memory/" + encodeURIComponent(note.id), { method: "DELETE" });
+          loadStudio();
+        });
+        row.append(text, remove);
+        list.appendChild(row);
+      });
+    }
+
+    document.getElementById("nav-command").addEventListener("click", () => showView("command"));
+    document.getElementById("nav-office").addEventListener("click", () => showView("office"));
+    document.getElementById("nav-crm").addEventListener("click", () => showView("crm"));
+    document.getElementById("nav-studio").addEventListener("click", () => showView("studio"));
+    document.getElementById("view-office").addEventListener("click", (event) => {
+      const trigger = event.target.closest("[data-agent]");
+      if (!trigger || trigger.closest("#office-task")) return;
+      openOffice(trigger.dataset.agent);
+    });
+    document.getElementById("office-task").addEventListener("submit", (event) => {
+      event.preventDefault();
+      const text = document.getElementById("office-task-text").value.trim();
+      if (!text) return;
+      const target = document.getElementById("office-task-target").value;
+      const lead = {
+        market: "Pazar, satış ve müşteri: ",
+        rnd: "Teknik, mimari ve Ar-Ge: ",
+        finance: "Finans, gider ve maliyet: "
+      }[target] || "";
+      const message = lead + text;
+      document.getElementById("command").value = message;
+      runCommand(message, { keepOffice: true });
+    });
+    document.getElementById("office-close").addEventListener("click", () => {
+      document.getElementById("office-modal").classList.add("hidden");
+    });
+    document.getElementById("office-modal").addEventListener("click", (event) => {
+      if (event.target.id === "office-modal") event.currentTarget.classList.add("hidden");
+    });
+    document.getElementById("office-temperature").addEventListener("input", (event) => {
+      document.getElementById("office-temp-read").textContent = Number(event.target.value).toFixed(1);
+    });
+    document.getElementById("office-save").addEventListener("click", saveOfficeDirective);
+
+    async function openOffice(agentId) {
+      const room = document.querySelector('.office-room[data-agent="' + agentId + '"]');
+      const modal = document.getElementById("office-modal");
+      const note = document.getElementById("office-modal-note");
+      note.textContent = "";
+      modal.dataset.agent = agentId;
+      document.getElementById("office-modal-title").textContent = room ? room.dataset.title : agentId;
+      document.getElementById("office-modal-role").textContent = room ? room.dataset.role : "";
+      document.getElementById("office-output").innerHTML = markdown(sections[room ? room.dataset.panel : ""] || "");
+      modal.classList.remove("hidden");
+      try {
+        const config = await (await apiFetch("/api/agents/config")).json();
+        officeAgents = config.agents || [];
+        const agent = officeAgents.find((item) => item.id === agentId);
+        document.getElementById("office-directive").value = agent ? agent.directive : "";
+        document.getElementById("office-temperature").value = agent ? agent.temperature : 0;
+        document.getElementById("office-temp-read").textContent = Number(agent ? agent.temperature : 0).toFixed(1);
+      } catch (error) {
+        console.error("Ajan direktifi yüklenemedi", error);
+        note.textContent = "Direktif okunamadı.";
+      }
+    }
+
+    async function saveOfficeDirective() {
+      const note = document.getElementById("office-modal-note");
+      const agentId = document.getElementById("office-modal").dataset.agent;
+      if (!officeAgents.length) {
+        note.textContent = "Direktif listesi henüz gelmedi.";
+        return;
+      }
+      const agents = officeAgents.map((agent) => ({
+        id: agent.id,
+        directive: agent.id === agentId ? document.getElementById("office-directive").value : agent.directive,
+        temperature: agent.id === agentId ? Number(document.getElementById("office-temperature").value) : Number(agent.temperature)
+      }));
+      const response = await apiFetch("/api/agents/config", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ agents })
+      });
+      if (!response.ok) {
+        note.textContent = "Kayıt tamamlanamadı.";
+        return;
+      }
+      const saved = await response.json();
+      officeAgents = saved.agents || agents;
+      note.textContent = "Direktif kaydedildi.";
+    }
+    document.getElementById("crm-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const note = document.getElementById("crm-note");
+      try {
+        await saveOpportunity({
+          musteri_adi: document.getElementById("crm-customer").value,
+          proje_basligi: document.getElementById("crm-project").value || currentProject,
+          teklif_tutari: Number(document.getElementById("crm-amount").value),
+          durum: "Taslak"
+        });
+        event.target.reset();
+        note.textContent = "Fırsat taslak olarak kaydedildi.";
+        await loadCrm();
+      } catch (error) {
+        note.textContent = error.message;
+      }
+    });
+    document.getElementById("email-save-crm").addEventListener("click", async () => {
+      const note = document.getElementById("email-crm-note");
+      const customer = document.getElementById("email-profile").value.trim();
+      if (customer.length < 2) {
+        note.textContent = "Önce hedef müşteri profilini yazın.";
+        return;
+      }
+      try {
+        const saved = await saveOpportunity({
+          musteri_adi: customer,
+          proje_basligi: currentProject,
+          teklif_tutari: Number(document.getElementById("email-crm-amount").value || 0),
+          durum: document.getElementById("email-crm-status").value,
+          notlar: document.getElementById("email-subject").value.trim()
+        });
+        note.textContent = saved.durum + " olarak hunide.";
+      } catch (error) {
+        note.textContent = error.message;
+      }
+    });
+    document.getElementById("pdf-close-crm").addEventListener("click", () => {
+      document.getElementById("pdf-crm-modal").classList.add("hidden");
+    });
+    document.getElementById("pdf-crm-modal").addEventListener("click", (event) => {
+      if (event.target.id === "pdf-crm-modal") event.currentTarget.classList.add("hidden");
+    });
+    document.getElementById("pdf-save-crm").addEventListener("click", async () => {
+      const note = document.getElementById("pdf-crm-note");
+      const customer = document.getElementById("pdf-crm-customer").value.trim();
+      if (customer.length < 2) {
+        note.textContent = "Müşteri adı gerekli.";
+        return;
+      }
+      try {
+        const saved = await saveOpportunity({
+          musteri_adi: customer,
+          proje_basligi: currentProject,
+          teklif_tutari: Number(document.getElementById("pdf-crm-amount").value || 0),
+          durum: document.getElementById("pdf-crm-status").value,
+          notlar: "PDF teklif"
+        });
+        note.textContent = saved.durum + " olarak hunide.";
+      } catch (error) {
+        note.textContent = error.message;
+      }
+    });
+    document.getElementById("tabs").addEventListener("click", (event) => {
+      const button = event.target.closest(".tab");
+      if (!button) return;
+      active = button.dataset.panel;
+      showPanel();
+    });
+    document.getElementById("command-form").addEventListener("submit", (event) => {
+      event.preventDefault();
+      const message = document.getElementById("command").value.trim();
+      if (message) runCommand(message);
+    });
+    document.querySelectorAll(".quick").forEach((button) => {
+      button.addEventListener("click", () => {
+        document.getElementById("command").value = button.dataset.command;
+        runCommand(button.dataset.command);
+      });
+    });
+    document.getElementById("copy-report").addEventListener("click", async () => {
+      const text = sections[active] || fullReport();
+      await navigator.clipboard.writeText(text);
+      document.getElementById("flow-note").textContent = "Bölüm kopyalandı";
+    });
+    document.getElementById("download-report").addEventListener("click", () => {
+      const blob = new Blob([fullReport()], { type: "text/markdown;charset=utf-8" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "bcd-rapor.md";
+      link.click();
+      URL.revokeObjectURL(link.href);
+    });
+    document.getElementById("download-pdf").addEventListener("click", async () => {
+      const button = document.getElementById("download-pdf");
+      button.disabled = true;
+      document.getElementById("flow-note").textContent = "PDF hazırlanıyor";
+      try {
+        const response = await apiFetch("/api/export/pdf", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ project_name: currentProject, sections })
+        });
+        if (!response.ok) throw new Error("pdf");
+        const blob = await response.blob();
+        const header = response.headers.get("content-disposition") || "";
+        const named = /filename=\"?([^\";]+)\"?/i.exec(header);
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = named ? named[1] : "bcd-teklif.pdf";
+        link.click();
+        URL.revokeObjectURL(link.href);
+        document.getElementById("flow-note").textContent = "PDF indirildi";
+        document.getElementById("pdf-crm-note").textContent = "";
+        document.getElementById("pdf-crm-modal").classList.remove("hidden");
+      } catch (error) {
+        document.getElementById("flow-note").textContent = "PDF oluşturulamadı";
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    function syncMailto() {
+      const subject = document.getElementById("email-subject").value.trim();
+      let body = document.getElementById("email-body").value;
+      if (body.length > 1600) body = body.slice(0, 1600) + "\n\n…";
+      document.getElementById("open-mailto").href = "mailto:?subject=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(body);
+    }
+
+    function openEmailModal() {
+      document.getElementById("email-project").textContent = currentProject || "Seçili proje yok; genel tanıtım yazılır.";
+      document.getElementById("email-modal").classList.remove("hidden");
+      syncMailto();
+    }
+
+    document.getElementById("open-email").addEventListener("click", openEmailModal);
+    document.getElementById("close-email").addEventListener("click", () => {
+      document.getElementById("email-modal").classList.add("hidden");
+    });
+    document.getElementById("email-modal").addEventListener("click", (event) => {
+      if (event.target.id === "email-modal") event.currentTarget.classList.add("hidden");
+    });
+    document.getElementById("email-subject").addEventListener("input", syncMailto);
+    document.getElementById("email-body").addEventListener("input", syncMailto);
+    document.getElementById("copy-email").addEventListener("click", async () => {
+      const subject = document.getElementById("email-subject").value.trim();
+      const body = document.getElementById("email-body").value;
+      await navigator.clipboard.writeText((subject ? "Konu: " + subject + "\n\n" : "") + body);
+      document.getElementById("email-status").textContent = "E-posta kopyalandı.";
+    });
+    document.getElementById("create-email").addEventListener("click", async () => {
+      const button = document.getElementById("create-email");
+      const profile = document.getElementById("email-profile").value.trim();
+      const status = document.getElementById("email-status");
+      if (profile.length < 2) {
+        status.textContent = "Hedef müşteri profilini yazın.";
+        return;
+      }
+      button.disabled = true;
+      status.textContent = "Taslak hazırlanıyor";
+      try {
+        const response = await apiFetch("/api/agents/draft-email", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ project_name: currentProject, customer_profile: profile, sections })
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          status.textContent = payload.detail || "Taslak oluşturulamadı.";
+          return;
+        }
+        document.getElementById("email-subject").value = payload.subject;
+        document.getElementById("email-body").value = payload.body;
+        syncMailto();
+        status.textContent = payload.mode === "llm" ? payload.model : "Kayıtlı analizden taslak";
+      } catch (error) {
+        status.textContent = "Taslak oluşturulamadı.";
+      } finally {
+        button.disabled = false;
+      }
+    });
+    document.getElementById("expense-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const note = document.getElementById("expense-note");
+      const response = await apiFetch("/api/expenses", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: document.getElementById("expense-name").value,
+          amount: Number(document.getElementById("expense-amount").value),
+          category: document.getElementById("expense-category").value,
+          project: document.getElementById("expense-project").value
+        })
+      });
+      const body = await response.json();
+      if (!response.ok) {
+        note.textContent = body.detail || "Gider yazılamadı.";
+        return;
+      }
+      note.textContent = body.message;
+      event.target.reset();
+      await loadLedger();
+    });
+    document.getElementById("save-config").addEventListener("click", async () => {
+      const note = document.getElementById("config-note");
+      const agents = [...document.querySelectorAll("#directive-forms article")].map((card) => ({
+        id: card.dataset.id,
+        directive: card.querySelector(".directive").value,
+        temperature: Number(card.querySelector(".temperature").value)
+      }));
+      const response = await apiFetch("/api/agents/config", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ agents })
+      });
+      note.textContent = response.ok ? "Direktifler kaydedildi." : "Kayıt tamamlanamadı.";
+    });
+    document.getElementById("memory-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const input = document.getElementById("memory-text");
+      const response = await apiFetch("/api/memory", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text: input.value })
+      });
+      if (response.ok) {
+        input.value = "";
+        loadStudio();
+      }
+    });
+
+    renderPipeline();
+    showPanel();
+    icons();
+    loadHealth();
+    loadProjects();
+    loadLedger();
+  </script>
+</body>
+</html>

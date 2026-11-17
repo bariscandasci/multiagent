@@ -9,16 +9,17 @@ from config import get_settings
 from memory.session import get_orchestrator
 
 DEPARTMENT_LABELS = {
-    "hr": "İK",
+    "market": "Pazar",
     "finance": "Finans",
-    "ops": "Operasyon",
+    "rnd": "Ar-Ge",
+    "brief": "Yönetici raporu",
     "supervisor": "Yönetici",
 }
 
 SAMPLES = (
-    "Personel listesini ve açık adayları çıkar",
-    "Son çeyrek gelir gider özeti ve geciken faturalar",
-    "Sunucu durumunu kontrol et ve teknik iş planı çıkar",
+    "Aylık sabit giderleri çıkar",
+    "Kayıtlı projeyi hangi sektörlere satabiliriz",
+    "Kayıtlı projenin teknik Ar-Ge yol haritasını çıkar",
 )
 
 
@@ -64,10 +65,27 @@ def cmd_demo() -> None:
         _print_result(orchestrator.ask(message, f"demo-{index}"))
 
 
-def cmd_serve(host: str, port: int) -> None:
+def resolve_ssl(keyfile: str | None, certfile: str | None) -> tuple[str, str] | None:
+    """İkisi birden varsa HTTPS, ikisi de yoksa HTTP. Biri eksikse hata verir."""
+    if not keyfile and not certfile:
+        return None
+    if not keyfile or not certfile:
+        raise ValueError("HTTPS için hem --ssl-keyfile hem --ssl-certfile gerekli.")
+    return keyfile, certfile
+
+
+def cmd_serve(host: str, port: int, ssl_keyfile: str | None = None, ssl_certfile: str | None = None) -> None:
     import uvicorn
 
-    uvicorn.run("api.app:app", host=host, port=port, reload=False)
+    try:
+        ssl_pair = resolve_ssl(ssl_keyfile, ssl_certfile)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+    kwargs = {"host": host, "port": port, "reload": False}
+    if ssl_pair:
+        kwargs["ssl_keyfile"] = ssl_pair[0]
+        kwargs["ssl_certfile"] = ssl_pair[1]
+    uvicorn.run("api.app:app", **kwargs)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -81,6 +99,8 @@ def build_parser() -> argparse.ArgumentParser:
     serve = sub.add_parser("serve", help="FastAPI sunucusunu başlat")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8000)
+    serve.add_argument("--ssl-keyfile", default=None)
+    serve.add_argument("--ssl-certfile", default=None)
     return parser
 
 
@@ -94,7 +114,7 @@ def main(argv: list[str] | None = None) -> None:
     elif args.command == "ask":
         cmd_ask(args.message, args.session)
     elif args.command == "serve":
-        cmd_serve(args.host, args.port)
+        cmd_serve(args.host, args.port, args.ssl_keyfile, args.ssl_certfile)
     else:
         parser.error(f"Bilinmeyen komut: {args.command}")
 

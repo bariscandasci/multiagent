@@ -53,6 +53,7 @@ class Orchestrator:
                 "mode": "mock",
                 "tools_used": [],
                 "answer": "İstek işlenirken bir hata oluştu. Lütfen yeniden deneyin.",
+                "trace": [],
             }
         return {
             "session_id": thread_id,
@@ -62,6 +63,7 @@ class Orchestrator:
             "mode": result.get("mode") or "mock",
             "tools_used": list(result.get("tools_used") or []),
             "answer": latest_answer(result.get("messages") or []),
+            "trace": [step for step in (result.get("trace") or []) if isinstance(step, dict)],
         }
 
 

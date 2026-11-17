@@ -15,3 +15,5 @@ class AgentState(TypedDict, total=False):
     mode: str
     reason: str
     tools_used: list[str]
+    project_slug: str
+    trace: list

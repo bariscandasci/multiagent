@@ -1,79 +1,62 @@
-"""İsteği departman ajanına ayıran yönetici."""
+"""İsteği departman ajanına veya bütünleşik rapora ayıran yönetici."""
 
 from __future__ import annotations
 
 import json
 import logging
 import re
+import time
 from dataclasses import dataclass
 
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from pydantic import BaseModel, Field
 
 from agents.catalog import AGENTS
-from agents.runtime import last_user_text, message_text
+from agents.context import agent_temperature, compose_prompt
+from agents.progress import announce, observe
+from agents.runtime import last_user_text
 from agents.state import AgentState
-from config import get_chat_model, get_settings
-from tools.common import contains_term, fold, mentions_record
-from tools.finance_tools import INVOICES
-from tools.hr_tools import CANDIDATES, EMPLOYEES
-from tools.ops_tools import SERVERS
+from config import bind_agent_model, describe_llm_error, get_settings
+from tools.common import contains_term, fold
+from tools.github_tools import fetch_github_repo, parse_repo_url
 
 logger = logging.getLogger(__name__)
 
-DEPARTMENTS = {"hr", "finance", "ops"}
+DEPARTMENTS = {"market", "finance", "rnd", "brief"}
 
-HR_TERMS = (
-    "personel",
-    "calisan",
-    "aday",
-    "ise alim",
-    "mulakat",
-    "kadro",
-    "izin",
-    "insan kaynak",
-    "bordro",
-    "cv",
-    "headcount",
-    "maas",
-    "ucret",
-    "ekip",
+MARKET_TERMS = (
+    "pazar",
+    "musteri",
+    "sektor",
+    "satis",
+    "deger oner",
+    "karar verici",
+    "olcek",
 )
 FINANCE_TERMS = (
-    "gelir",
     "gider",
-    "fatura",
+    "maliyet",
     "butce",
     "muhasebe",
-    "tahsilat",
-    "odeme",
-    "nakit",
-    "maliyet",
-    "bilanco",
+    "fiyat",
     "karlilik",
-    "kar marji",
-    "alacak",
-    "borc",
+    "net kar",
+    "tahsilat",
+    "finans",
 )
-FINANCE_EXACT = ("kar", "zarar")
-OPS_TERMS = (
-    "sunucu",
-    "sistem durum",
-    "cpu",
-    "bellek",
-    "disk",
-    "incident",
-    "kesinti",
-    "deploy",
-    "bakim",
-    "uptime",
-    "devops",
-    "heartbeat",
-    "servis durum",
-    "teknik gorev",
-    "is plani",
-    "ariza",
-    "olay kaydi",
+FINANCE_EXACT = ("kar",)
+RND_TERMS = (
+    "ar-ge",
+    "yol harita",
+    "kutuphane",
+    "teknik",
+    "ozellik",
+    "rakip",
+    "entegrasyon",
+    "kod",
+    "mimari",
 )
+BRIEF_TERMS = ("butunlesik", "yonetici raporu", "uc uzman", "hepsini cikar")
 SMALLTALK = (
     "merhaba",
     "selam",
@@ -99,33 +82,28 @@ class RouteDecision:
     mode: str
 
 
+class DepartmentRoute(BaseModel):
+    """İsteğin gideceği tek akış."""
+
+    route: str = Field(description="Yalnızca market, finance, rnd, brief veya general.")
+
+
 def _score_terms(text: str, terms: tuple[str, ...]) -> int:
     return sum(1 for term in terms if contains_term(text, term))
 
 
-def _apply_record_signals(text: str, scores: dict[str, int]) -> None:
-    for person in EMPLOYEES:
-        if mentions_record(text, name=str(person["name"]), record_id=str(person["id"])):
-            scores["hr"] += 3
-            break
-    for candidate in CANDIDATES:
-        if mentions_record(text, name=candidate["name"], record_id=candidate["id"]):
-            scores["hr"] += 3
-            break
-    for invoice in INVOICES:
-        if contains_term(text, fold(str(invoice["id"]))):
-            scores["finance"] += 3
-            break
-    for server in SERVERS:
-        if contains_term(text, fold(str(server["name"]))):
-            scores["ops"] += 3
-            break
-    if re.search(r"(?<![a-z0-9])inc-\d+", text):
-        scores["ops"] += 3
-
-
 def _is_smalltalk(text: str) -> bool:
     return any(contains_term(text, term) for term in SMALLTALK)
+
+
+def extract_github_url(text: str) -> str:
+    match = re.search(r"https?://github\.com/[\w.-]+/[\w.-]+", text or "", flags=re.IGNORECASE)
+    if match:
+        return match.group(0).rstrip(").,")
+    stripped = (text or "").strip()
+    if stripped and " " not in stripped and parse_repo_url(stripped):
+        return stripped
+    return ""
 
 
 def heuristic_route(query: str, previous: str = "") -> RouteDecision:
@@ -133,13 +111,14 @@ def heuristic_route(query: str, previous: str = "") -> RouteDecision:
     folded = fold(query)
     if not folded.strip():
         return RouteDecision("general", "empty", "mock")
+    if extract_github_url(query) or _score_terms(folded, BRIEF_TERMS):
+        return RouteDecision("brief", "github" if extract_github_url(query) else "keyword", "mock")
 
     scores = {
-        "hr": _score_terms(folded, HR_TERMS),
+        "market": _score_terms(folded, MARKET_TERMS),
         "finance": _score_terms(folded, FINANCE_TERMS) + _score_terms(folded, FINANCE_EXACT),
-        "ops": _score_terms(folded, OPS_TERMS),
+        "rnd": _score_terms(folded, RND_TERMS),
     }
-    _apply_record_signals(folded, scores)
     best = max(scores.values())
     winners = [name for name, score in scores.items() if score == best and score > 0]
     previous_name = previous if previous in DEPARTMENTS else ""
@@ -154,6 +133,8 @@ def heuristic_route(query: str, previous: str = "") -> RouteDecision:
         return RouteDecision(winners[0], "keyword", "mock")
     if previous_name in winners:
         return RouteDecision(previous_name, "follow_up", "mock")
+    if "proje" in folded:
+        return RouteDecision("brief", "keyword", "mock")
     return RouteDecision("general", "ambiguous", "mock")
 
 
@@ -168,15 +149,20 @@ def _parse_route(text: str) -> str | None:
         if isinstance(payload, dict):
             raw = str(payload.get("route", ""))
     aliases = {
-        "hr": "hr",
-        "ik": "hr",
-        "insan kaynaklari": "hr",
+        "market": "market",
+        "pazar": "market",
+        "operasyon": "market",
+        "satis": "market",
         "finance": "finance",
         "finans": "finance",
         "muhasebe": "finance",
-        "ops": "ops",
-        "operasyon": "ops",
-        "teknik": "ops",
+        "rnd": "rnd",
+        "arge": "rnd",
+        "ar-ge": "rnd",
+        "teknik": "rnd",
+        "brief": "brief",
+        "yonetici": "brief",
+        "repo": "brief",
         "general": "general",
         "genel": "general",
         "supervisor": "general",
@@ -184,29 +170,51 @@ def _parse_route(text: str) -> str | None:
     return aliases.get(fold(raw).strip())
 
 
+ROUTING_PROMPT = (
+    "Sen BCD TECHNOLOGIES içindeki yönlendiricisin. İsteği tek bir route değerine ayır.\n"
+    "market: sektör, müşteri, satış stratejisi.\n"
+    "finance: gider, maliyet, fiyat, kâr.\n"
+    "rnd: kod, kütüphane, Ar-Ge yol haritası.\n"
+    "brief: GitHub deposu veya pazar, teknik ve finansın birlikte istendiği inceleme.\n"
+    "general: selamlama veya belirsiz istek.\n"
+    "Kısa takip cümlesinde önceki akışı koru."
+)
+
+
+def routing_prompt() -> str:
+    return compose_prompt("supervisor", ROUTING_PROMPT)
+
+
 def _llm_route(query: str, previous: str) -> str | None:
-    prompt = (
-        "Sen bir şirket içi yönlendiricisin. İsteği tek bir değere ayır.\n"
-        "İzin verilen route değerleri: hr, finance, ops, general.\n"
-        "hr: personel, aday, kadro, izin.\n"
-        "finance: gelir, gider, fatura, bütçe, tahsilat.\n"
-        "ops: sunucu, kesinti, bakım, teknik iş planı.\n"
-        "general: selamlama, yetenek sorusu veya belirsiz istek.\n"
-        f"Önceki departman: {previous or 'yok'}. Kısa takip cümlesinde önceki departmanı koru.\n"
-        'Yanıtı yalnızca JSON ver: {"route": "hr"}\n\n'
-        f"İstek: {query}"
+    prompt = routing_prompt()
+    model = bind_agent_model(
+        get_settings(),
+        agent_temperature("supervisor"),
+        schema=DepartmentRoute,
     )
-    result = get_chat_model().invoke([HumanMessage(content=prompt)])
-    return _parse_route(message_text(result.content))
+    result = model.invoke(
+        [
+            SystemMessage(content=prompt),
+            HumanMessage(content=f"Önceki akış: {previous or 'yok'}\nİstek: {query}"),
+        ]
+    )
+    if isinstance(result, DepartmentRoute):
+        return _parse_route(result.route)
+    if isinstance(result, dict):
+        return _parse_route(str(result.get("route", "")))
+    return None
 
 
 def decide_route(query: str, previous: str = "") -> RouteDecision:
     settings = get_settings()
-    if settings.configured:
+    if settings.configured and not extract_github_url(query):
         try:
             route = _llm_route(query, previous)
         except Exception as exc:
-            logger.warning("LLM yönlendirmesi başarısız, kural tabanına düşüldü: %s", exc.__class__.__name__)
+            logger.warning(
+                "LLM yönlendirmesi başarısız, kural tabanına düşüldü: %s",
+                describe_llm_error(exc),
+            )
         else:
             if route:
                 return RouteDecision(route, "llm", "llm")
@@ -215,28 +223,61 @@ def decide_route(query: str, previous: str = "") -> RouteDecision:
 
 def general_reply(reason: str) -> str:
     if reason == "ambiguous":
-        opening = "İsteği tek bir departmana bağlayamadım. Biraz daha net yazar mısınız?"
+        opening = "İsteği tek bir akışa bağlayamadım. Biraz daha net yazar mısınız?"
     elif reason == "empty":
         opening = "Bir istek yazmadınız."
+    elif reason == "github_error":
+        opening = "GitHub deposu okunamadı."
     else:
-        opening = "Ben şirket içi çoklu ajan yöneticisiyim. İsteğinizi ilgili departmana yönlendiririm."
+        opening = "Ben BCD TECHNOLOGIES çoklu ajan yöneticisiyim. Depo, pazar, Ar-Ge ve finans işlerini ilgili uzmana alırım."
     lines = [opening, ""]
     for agent in AGENTS:
         if agent["id"] == "supervisor":
             continue
         lines.append(f"- {agent['name']}: {agent['description']}")
     lines.append("")
-    lines.append('Örnek: "Açık faturaları listele" veya "db-01 durumunu kontrol et".')
+    lines.append('Örnek: "https://github.com/bariscandasci/ankaras" veya "Aylık sabit giderleri çıkar".')
     return "\n".join(lines)
 
 
+def _slug_from_fetch(text: str) -> str:
+    for line in text.splitlines():
+        if line.lower().startswith("slug:"):
+            return line.split(":", 1)[1].strip()
+    return ""
+
+
 def supervisor_node(state: AgentState) -> dict:
+    announce("supervisor", "Yönetici")
+    started = time.perf_counter()
     query = last_user_text(list(state.get("messages") or []))
     previous = state.get("department") or ""
     if previous == "supervisor":
         previous = ""
+    url = extract_github_url(query)
+    if url:
+        outcome = str(fetch_github_repo.invoke({"repo_url": url}))
+        step = observe("supervisor", "Yönetici", ["fetch_github_repo"], started)
+        if outcome.startswith("Hata"):
+            return {
+                "messages": [AIMessage(content=f"{outcome}\n\n{general_reply('github_error')}", name="supervisor")],
+                "department": "supervisor",
+                "route": "general",
+                "reason": "github_error",
+                "mode": "mock",
+                "tools_used": ["fetch_github_repo"],
+                "trace": [step],
+            }
+        return {
+            "route": "brief",
+            "reason": "github",
+            "project_slug": _slug_from_fetch(outcome),
+            "department": "brief",
+            "trace": [step],
+        }
     decision = decide_route(query, previous)
-    update: dict = {"route": decision.route, "reason": decision.reason}
+    step = observe("supervisor", "Yönetici", [], started)
+    update: dict = {"route": decision.route, "reason": decision.reason, "trace": [step]}
     if decision.route == "general":
         update.update(
             {

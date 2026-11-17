@@ -1,56 +1,61 @@
-"""Finans ve muhasebe ajanı."""
+"""Muhasebe ve finans ajanı."""
 
 from __future__ import annotations
 
+from agents.context import agent_temperature, compose_prompt
 from agents.runtime import run_department
 from agents.state import AgentState
-from tools.common import COMPANY, contains_term, dedupe_calls, detect_department, fold
-from tools.finance_tools import FINANCE_TOOLS
+from tools.common import COMPANY, contains_term, dedupe_calls, fold
+from tools.finance_tools import FINANCE_TOOLS, parse_amount
 
-SYSTEM_PROMPT = f"""Sen {COMPANY} içindeki Finans ve Muhasebe ajanısın.
-Gelir-gider, fatura ve bütçe sorularını araçlarla yanıtla. Araçların vermediği tutarı yazma.
-Yanıtı Türkçe, kısa bir finansal özet olarak yaz.
-Veriler örnek şirket veri setindendir; raporda bunu kısaca belirt."""
+SYSTEM_PROMPT = f"""Sen {COMPANY} içindeki Muhasebe ve Finans ajanısın.
+Tutarları yalnızca get_monthly_expenses, add_expense ve simulate_project_budget sonuçlarından yaz.
+Aylık sabit gideri, yeni bir iş veya ek teknoloji maliyetini, önerilen fiyatı ve net kârı Türkçe özetle.
+Deftere yazılmayan tutarı gerçekleşmiş gider gibi gösterme."""
 
 
 def plan_finance_calls(text: str) -> list[tuple[str, dict]]:
     folded = fold(text)
     calls: list[tuple[str, dict]] = []
-    if any(contains_term(folded, term) for term in ("fatura", "tahsilat", "vade", "alacak", "borc")) or "f-" in folded:
-        status = ""
-        if "gecik" in folded:
-            status = "overdue"
-        elif any(contains_term(folded, term) for term in ("odendi", "odenen", "kapali")):
-            status = "paid"
-        elif any(contains_term(folded, term) for term in ("acik", "odenmemis", "bekleyen")):
-            status = "open"
-        calls.append(("list_invoices", {"status": status}))
-    if contains_term(folded, "butce") or contains_term(folded, "maliyet"):
-        calls.append(("budget_summary", {"department": detect_department(text)}))
-    wants_pnl = (
-        any(
-            contains_term(folded, term)
-            for term in ("gelir", "gider", "nakit", "bilanco", "karlilik", "kar", "zarar")
-        )
-        or "ozet" in folded
+    amount = parse_amount(text)
+    wants_add = any(contains_term(folded, term) for term in ("ekle", "kaydet", "yeni gider", "maliyet ekle"))
+    if wants_add and amount is not None:
+        project = ""
+        if "proje" in folded:
+            project = "yeni proje"
+        calls.append(("add_expense", {"name": "Ek gider", "amount": amount, "category": "teknoloji", "project": project}))
+    wants_sim = any(
+        contains_term(folded, term)
+        for term in ("simul", "butce", "karlilik", "fiyat", "teklif", "net kar")
     )
-    if wants_pnl or not calls:
-        period = "quarter"
-        if any(term in folded for term in ("bu ay", "aylik", "bu ayki")):
-            period = "month"
-        elif any(term in folded for term in ("yillik", "bu yil", "alti ay", "6 ay")):
-            period = "year"
-        calls.append(("income_expense_summary", {"period": period}))
+    if wants_sim or contains_term(folded, "kar"):
+        calls.append(
+            (
+                "simulate_project_budget",
+                {
+                    "project": "yeni iş",
+                    "monthly_price": amount or 0,
+                    "extra_monthly_cost": 0,
+                    "note": "",
+                },
+            )
+        )
+    if any(contains_term(folded, term) for term in ("gider", "maliyet", "muhasebe", "sabit")) or not calls:
+        calls.insert(0, ("get_monthly_expenses", {}))
     return dedupe_calls(calls)
 
 
 def finance_node(state: AgentState) -> dict:
+    slug = str(state.get("project_slug") or "")
+    extra = f"Simülasyonu {slug} projesi için çalıştır." if slug else ""
     return run_department(
         state,
         department="finance",
         agent_name="finance_agent",
-        title=f"Finans & Muhasebe Ajanı — {COMPANY}",
-        system_prompt=SYSTEM_PROMPT,
+        title=f"Muhasebe & Finans — {COMPANY}",
+        pipeline_label="Muhasebe",
+        system_prompt=compose_prompt("finance", SYSTEM_PROMPT, extra),
         tools=FINANCE_TOOLS,
         plan_calls=plan_finance_calls,
+        temperature=agent_temperature("finance"),
     )

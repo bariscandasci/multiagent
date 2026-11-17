@@ -9,3 +9,7 @@ __pycache__/
 dist/
 build/
 *.egg-info/
+backups/
+data/*.json
+data/**/*.json
+projeler/*.pdf

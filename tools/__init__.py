@@ -1,7 +1,6 @@
-"""Departman mock araçları."""
+"""BCD TECHNOLOGIES araçları."""
 
 from tools.finance_tools import FINANCE_TOOLS
-from tools.hr_tools import HR_TOOLS
-from tools.ops_tools import OPS_TOOLS
+from tools.github_tools import GITHUB_TOOLS
 
-__all__ = ["FINANCE_TOOLS", "HR_TOOLS", "OPS_TOOLS"]
+__all__ = ["FINANCE_TOOLS", "GITHUB_TOOLS"]

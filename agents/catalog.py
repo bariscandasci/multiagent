@@ -6,21 +6,21 @@ AGENTS: list[dict[str, str]] = [
     {
         "id": "supervisor",
         "name": "Yönetici",
-        "description": "İsteği analiz eder ve doğru departman ajanına yönlendirir.",
+        "description": "GitHub deposunu okur; pazar, Ar-Ge ve finans ajanlarını tek raporda birleştirir.",
     },
     {
-        "id": "hr",
-        "name": "İK & Veri",
-        "description": "Personel ve aday verilerini analiz eder, kadro raporu çıkarır.",
+        "id": "market",
+        "name": "Operasyon & Pazar Geliştirme",
+        "description": "Depoyu sektör, müşteri profili, değer önerisi ve satış stratejisi olarak okur.",
     },
     {
         "id": "finance",
-        "name": "Finans & Muhasebe",
-        "description": "Gelir-gider, fatura ve bütçe özetleri üretir.",
+        "name": "Muhasebe & Finans",
+        "description": "Sabit giderleri, proje maliyetini, fiyat önerisini ve net kârı hesaplar.",
     },
     {
-        "id": "ops",
-        "name": "Teknik & Operasyon",
-        "description": "Sunucu durumunu kontrol eder ve teknik iş planı çıkarır.",
+        "id": "rnd",
+        "name": "Teknik & Ar-Ge",
+        "description": "Kod yapısını inceler; ayırıcı özellik, kütüphane ve Ar-Ge yol haritası çıkarır.",
     },
 ]

@@ -1,0 +1,12 @@
+.git
+.venv
+venv
+__pycache__
+.pytest_cache
+.mypy_cache
+.cursor
+*.py[cod]
+.env
+backups
+*.tar.gz
+DEPLOYMENT.md

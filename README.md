@@ -1,29 +1,31 @@
-# Şirket İçi Çoklu Ajan Sistemi
+# BCD TECHNOLOGIES Çoklu Ajan
 
-Yönetici ajan gelen isteği üç departmandan birine yönlendirir: İK, finans ve operasyon. Her departmanın örnek veriyle çalışan mock araçları vardır. API anahtarı yokken sistem bu araçlarla yanıt verir; anahtar tanımlanınca aynı grafik LangGraph üzerinden OpenAI veya Gemini ile konuşur.
+Yönetici ajan gelen isteği üç uzmana ayırır: Operasyon ve Pazar Geliştirme, Muhasebe ve Finans, Teknik ve Ar-Ge. Bir GitHub adresi verildiğinde depo önce okunur; üç uzman aynı kayıt üzerinden tek yönetici raporunda birleşir.
 
 ```mermaid
 flowchart TD
-  Kullanici[Kullanıcı] --> Supervisor[Supervisor]
-  Supervisor -->|İK| HR[hr_agent]
-  Supervisor -->|Finans| Finance[finance_agent]
-  Supervisor -->|Operasyon| Ops[ops_agent]
-  Supervisor -->|Belirsiz| Yanit[Doğrudan yanıt]
-  HR --> Araclar[Mock araçlar]
-  Finance --> Araclar
-  Ops --> Araclar
+  Kullanici[Kullanıcı] --> Supervisor[Yönetici]
+  Supervisor -->|GitHub adresi| Kayit[data/projeler]
+  Kayit --> Pazar[Pazar]
+  Kayit --> ARGE[Ar-Ge]
+  Kayit --> Finans[Finans]
+  Pazar --> Rapor[Yönetici raporu]
+  ARGE --> Rapor
+  Finans --> Rapor
+  Supervisor -->|Tek soru| Uzman[İlgili uzman]
 ```
+
+Finans tutarları `data/finans/giderler.json` dosyasındadır. Proje özetleri `data/projeler/` altına yazılır. Gizli depolar `.env` içindeki `GITHUB_TOKEN` ile okunur.
 
 ## Klasör yapısı
 
 ```text
-agents/     supervisor.py, hr_agent.py, finance_agent.py, ops_agent.py
-tools/      departman başına mock araçlar
+agents/     supervisor, market, finance, rnd, brief
+tools/      GitHub okuma, finans defteri, pazar ve Ar-Ge metni
+data/       giderler.json ve kaydedilen depo özetleri
 memory/     süreç içi oturum belleği
 api/        FastAPI uygulaması
 main.py     terminal sohbeti ve sunucu
-.env.example
-requirements.txt
 ```
 
 ## Kurulum
@@ -31,51 +33,28 @@ requirements.txt
 Python 3.10 veya daha yeni bir sürüm gerekir.
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
+python -m venv .venv
+.venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env
+copy .env.example .env
 ```
 
-`.env` içindeki anahtarlar boş kalabilir. Bu durumda ajanlar mock modda çalışır.
-
-LLM kullanmak için `LLM_PROVIDER` değerini `openai` veya `gemini` yapın ve ilgili anahtarı doldurun. `OPENAI_BASE_URL` OpenAI uyumlu başka bir ucu da kabul eder. Model adını hesabınızın erişebildiği bir modelle değiştirin.
+LLM için `LLM_PROVIDER` değerini `gemini` yapın ve `GEMINI_API_KEY` doldurun. Model `gemini-3.8-flash` olarak ayarlıdır. İstekler dakikada `LLM_RPM` (varsayılan 4) ile sınırlanır, geçici hatalarda dört kez yeniden denenir. Ana model yine de hata verirse aynı sıcaklıkla `gemini-3.5-flash-lite` yedeği devreye girer; yedek model kendi `LLM_FALLBACK_RPM` tavanını kullanır. `GEMINI_API_KEYS` birden fazla anahtar içerirse anahtarlar sırayla kullanılır. `ADMIN_USERNAME` ve `ADMIN_PASSWORD` birlikte doluysa komuta merkezi HTTP Basic Auth ister.
 
 ## Çalıştırma
 
-Üç örnek isteği tek seferde görmek için:
-
 ```bash
 python main.py demo
-```
-
-Tek soru:
-
-```bash
-python main.py ask "Ayşe Demir hangi departmanda?"
-```
-
-Terminal sohbeti (`/exit` çıkar, `/reset` oturumu sıfırlar):
-
-```bash
+python main.py ask "https://github.com/bariscandasci/ankaras"
 python main.py chat
-```
-
-API:
-
-```bash
 python main.py serve
 ```
 
-Servis `http://127.0.0.1:8000` adresinde açılır. Açık API şeması `/docs` altındadır.
+Servis `http://127.0.0.1:8000` adresinde komuta merkezini açar. Sohbet, proje ve gider uçları `/api` altındadır. Yerel sertifika verilirse aynı komut HTTPS dinler:
 
 ```bash
-curl -s http://127.0.0.1:8000/chat \
-  -H 'content-type: application/json' \
-  -d '{"message":"Son çeyrek gelir gider özeti","session_id":"demo"}'
+python main.py serve --ssl-keyfile key.pem --ssl-certfile cert.pem
 ```
-
-`session_id` aynı kaldıkça takip cümleleri aynı departmanda kalır. Bellek sürecin içindedir; sunucu kapanınca silinir.
 
 ## Test
 
@@ -83,8 +62,4 @@ curl -s http://127.0.0.1:8000/chat \
 pytest
 ```
 
-Testler ağa çıkmaz. Yanıtlar `Kuzey Yazılım A.Ş.` adlı uydurma şirket verisinden gelir.
-
-## Bu aşamada olmayanlar
-
-API'de kimlik doğrulama yoktur; servisi yalnız yerel denemede kullanın. Personel, fatura ve sunucu kayıtları canlı sistemlerden okunmaz. Sonraki aşamada mock araçların arkasına gerçek veri kaynakları bağlanabilir.
+Testler GitHub'a ve modele çıkmaz. Finans hesabı geçici bir defter kopyasıyla yapılır.

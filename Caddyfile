@@ -1,0 +1,6 @@
+# Özel ağ kurulumu bu dosyayı kullanmaz. docker compose Caddy başlatmaz.
+{$DOMAIN_NAME} {
+	reverse_proxy app:8000 {
+		flush_interval -1
+	}
+}
