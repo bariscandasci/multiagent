@@ -220,6 +220,23 @@
             </form>
             <div id="memory-list" class="mt-4 space-y-2 text-sm"></div>
           </div>
+          <div class="glass rounded-2xl p-4">
+            <h2 class="text-base font-semibold">Kurumsal Doküman &amp; Eğitim Dosyası Yükle</h2>
+            <p class="mt-1 text-sm text-zinc-400">PDF, Markdown ve metin dosyaları parçalanır. Ajanlar çalışırken sorguyla en yakın parçaları okur.</p>
+            <form id="knowledge-form" class="mt-3 flex flex-col gap-2 lg:flex-row lg:items-center">
+              <input id="knowledge-file" class="min-w-0 flex-1 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-[#e8c99a] file:px-3 file:py-2 file:text-sm file:font-semibold file:text-zinc-950" type="file" accept=".pdf,.md,.txt,application/pdf,text/plain,text/markdown" aria-label="Kurumsal doküman" required>
+              <select id="knowledge-department" class="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm" aria-label="Hedef departman">
+                <option value="all">Tüm Şirket</option>
+                <option value="manager">Yönetici</option>
+                <option value="market">Operasyon &amp; Pazar</option>
+                <option value="rnd">Teknik &amp; Ar-Ge</option>
+                <option value="finance">Muhasebe &amp; Finans</option>
+              </select>
+              <button class="rounded-xl border border-[#e8c99a]/40 px-4 py-2 text-sm" type="submit">Yükle</button>
+            </form>
+            <p id="knowledge-note" class="mt-2 text-xs text-zinc-400"></p>
+            <div id="knowledge-list" class="mt-4 overflow-x-auto text-sm"></div>
+          </div>
         </section>
 
         <section id="view-crm" class="hidden space-y-4">
@@ -1105,7 +1122,79 @@
       if (name === "crm") loadCrm();
     }
 
+    const KNOWLEDGE_LABELS = {
+      all: "Tüm Şirket",
+      manager: "Yönetici",
+      market: "Operasyon & Pazar",
+      rnd: "Teknik & Ar-Ge",
+      finance: "Muhasebe & Finans"
+    };
+
+    async function loadKnowledge() {
+      const list = document.getElementById("knowledge-list");
+      if (!list) return;
+      let library;
+      try {
+        const response = await apiFetch("/api/knowledge");
+        if (!response.ok) throw new Error("GET /api/knowledge " + response.status);
+        library = await response.json();
+      } catch (error) {
+        console.error("Kurumsal dokümanlar yüklenemedi", error);
+        return;
+      }
+      list.replaceChildren();
+      const documents = library.documents || [];
+      if (!documents.length) {
+        const empty = document.createElement("p");
+        empty.className = "text-sm text-zinc-500";
+        empty.textContent = "Henüz kurumsal doküman yok.";
+        list.appendChild(empty);
+        return;
+      }
+      const table = document.createElement("table");
+      table.className = "w-full min-w-[36rem] border-collapse text-left";
+      const head = document.createElement("tr");
+      ["Doküman", "Departman", "Özet", ""].forEach((label) => {
+        const cell = document.createElement("th");
+        cell.className = "border-b border-white/10 px-2 py-2 text-[11px] uppercase tracking-[0.12em] text-zinc-500";
+        cell.textContent = label;
+        head.appendChild(cell);
+      });
+      table.appendChild(head);
+      documents.forEach((documentRow) => {
+        const row = document.createElement("tr");
+        const title = document.createElement("td");
+        title.className = "border-b border-white/10 px-2 py-2 align-top font-medium";
+        title.textContent = documentRow.title;
+        const department = document.createElement("td");
+        department.className = "border-b border-white/10 px-2 py-2 align-top text-zinc-300";
+        department.textContent = KNOWLEDGE_LABELS[documentRow.department] || documentRow.department;
+        const summary = document.createElement("td");
+        summary.className = "border-b border-white/10 px-2 py-2 align-top text-zinc-400";
+        summary.textContent = documentRow.summary || "";
+        const action = document.createElement("td");
+        action.className = "border-b border-white/10 px-2 py-2 align-top text-right";
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "text-[11px] text-rose-300";
+        remove.textContent = "Sil";
+        remove.addEventListener("click", async () => {
+          const response = await apiFetch("/api/knowledge/" + encodeURIComponent(documentRow.id), { method: "DELETE" });
+          if (!response.ok) {
+            document.getElementById("knowledge-note").textContent = "Doküman silinemedi.";
+            return;
+          }
+          loadKnowledge();
+        });
+        action.appendChild(remove);
+        row.append(title, department, summary, action);
+        table.appendChild(row);
+      });
+      list.appendChild(table);
+    }
+
     async function loadStudio() {
+      loadKnowledge();
       let config;
       let memory;
       try {
@@ -1473,6 +1562,40 @@
         body: JSON.stringify({ agents })
       });
       note.textContent = response.ok ? "Direktifler kaydedildi." : "Kayıt tamamlanamadı.";
+    });
+    document.getElementById("knowledge-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const note = document.getElementById("knowledge-note");
+      const input = document.getElementById("knowledge-file");
+      const file = input.files && input.files[0];
+      if (!file) {
+        note.textContent = "Önce bir dosya seçin.";
+        return;
+      }
+      const body = new FormData();
+      body.append("file", file);
+      body.append("department", document.getElementById("knowledge-department").value);
+      note.textContent = "Yükleniyor...";
+      try {
+        const response = await apiFetch("/api/knowledge/upload", { method: "POST", body });
+        if (!response.ok) {
+          let detail = "Doküman yüklenemedi.";
+          try {
+            const payload = await response.json();
+            if (typeof payload.detail === "string") detail = payload.detail;
+          } catch (error) {
+            console.error("Yükleme yanıtı okunamadı", error);
+          }
+          note.textContent = detail;
+          return;
+        }
+        input.value = "";
+        note.textContent = "Doküman bilgi bankasına eklendi.";
+        loadKnowledge();
+      } catch (error) {
+        console.error("Kurumsal doküman yüklenemedi", error);
+        note.textContent = "Doküman yüklenemedi.";
+      }
     });
     document.getElementById("memory-form").addEventListener("submit", async (event) => {
       event.preventDefault();

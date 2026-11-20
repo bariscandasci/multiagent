@@ -134,6 +134,20 @@ class MemoryDocument(BaseModel):
     notes: list[MemoryNote]
 
 
+class KnowledgeDocument(BaseModel):
+    id: str
+    title: str
+    filename: str
+    department: str
+    summary: str = ""
+    chunk_count: int = 0
+    created_at: str = ""
+
+
+class KnowledgeLibrary(BaseModel):
+    documents: list[KnowledgeDocument]
+
+
 class MemoryCreate(BaseModel):
     text: str = Field(..., min_length=1, max_length=2000)
 

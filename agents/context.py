@@ -121,7 +121,7 @@ def memory_block() -> str:
     return "\n".join(lines)
 
 
-def compose_prompt(agent_id: str, fallback: str, extra: str = "") -> str:
+def compose_prompt(agent_id: str, fallback: str, extra: str = "", query: str = "") -> str:
     directive = agent_settings(agent_id)["directive"] if agent_id in DEFAULT_DIRECTIVES else fallback
     if not str(directive).strip():
         directive = fallback
@@ -131,6 +131,12 @@ def compose_prompt(agent_id: str, fallback: str, extra: str = "") -> str:
     memory = memory_block()
     if memory:
         parts.append(memory)
+    if query.strip() and agent_id in DEFAULT_DIRECTIVES:
+        from tools.knowledge import reference_block
+
+        reference = reference_block(agent_id, query)
+        if reference:
+            parts.append(reference)
     return "\n\n".join(part for part in parts if part)
 
 

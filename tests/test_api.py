@@ -55,6 +55,8 @@ def test_home_is_the_command_center():
     assert "AI Command Center" in response.text
     assert "Ajanları Çalıştır" in response.text
     assert "Ajan Eğitimi" in response.text
+    assert "Kurumsal Doküman" in response.text
+    assert "/api/knowledge/upload" in response.text
     assert "PDF Teklif İndir" in response.text
     assert "Müşteri E-postası Oluştur" in response.text
 
@@ -248,9 +250,10 @@ def test_agent_directives_and_memory_are_saved():
 def test_market_node_reads_the_saved_directive(monkeypatch):
     seen = {}
 
-    def fake(agent_id, fallback, extra=""):
+    def fake(agent_id, fallback, extra="", query=""):
         seen["id"] = agent_id
         seen["extra"] = extra
+        seen["query"] = query
         return fallback
 
     monkeypatch.setattr("agents.market_agent.compose_prompt", fake)

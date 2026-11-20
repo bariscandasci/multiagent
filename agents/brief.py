@@ -16,7 +16,7 @@ from agents.handoff import compact_handoff
 from agents.progress import announce, observe, publish_section
 from agents.rnd_agent import SYSTEM_PROMPT as RND_PROMPT
 from agents.rnd_agent import plan_rnd_calls
-from agents.runtime import llm_answer, render_mock
+from agents.runtime import last_user_text, llm_answer, render_mock
 from agents.state import AgentState
 from config import describe_llm_error, get_settings
 from tools.analysis import build_market_section, build_rnd_section
@@ -75,13 +75,14 @@ def _with_handoff(base: str, handoff: str) -> str:
 
 def brief_node(state: AgentState) -> dict:
     messages = list(state.get("messages") or [])
+    query = last_user_text(messages)
     slug = str(state.get("project_slug") or "")
     focus = f"Kayıt slug: {slug}. Önce read_project ile bu kaydı oku." if slug else ""
     carried: list[str] = []
     market_started = time.perf_counter()
     announce("market", "Operasyon & Pazar")
     market_text, market_tools, market_mode = _llm_section(
-        compose_prompt("market", MARKET_PROMPT, _with_handoff(focus, "")),
+        compose_prompt("market", MARKET_PROMPT, _with_handoff(focus, ""), query),
         GITHUB_TOOLS,
         messages,
         plan_market_calls,
@@ -96,7 +97,7 @@ def brief_node(state: AgentState) -> dict:
     rnd_started = time.perf_counter()
     announce("rnd", "Teknik Ar-Ge")
     rnd_text, rnd_tools, rnd_mode = _llm_section(
-        compose_prompt("rnd", RND_PROMPT, _with_handoff(focus, compact_handoff("\n\n".join(carried)))),
+        compose_prompt("rnd", RND_PROMPT, _with_handoff(focus, compact_handoff("\n\n".join(carried))), query),
         GITHUB_TOOLS,
         messages,
         plan_rnd_calls,
@@ -116,6 +117,7 @@ def brief_node(state: AgentState) -> dict:
             "finance",
             FINANCE_PROMPT,
             _with_handoff(finance_focus, compact_handoff("\n\n".join(carried))),
+            query,
         ),
         FINANCE_TOOLS,
         messages,

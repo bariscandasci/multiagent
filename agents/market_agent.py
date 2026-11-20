@@ -34,7 +34,7 @@ def market_node(state: AgentState) -> dict:
         agent_name="market_agent",
         title=f"Operasyon & Pazar Geliştirme — {COMPANY}",
         pipeline_label="Operasyon & Pazar",
-        system_prompt=compose_prompt("market", SYSTEM_PROMPT, extra),
+        system_prompt=compose_prompt("market", SYSTEM_PROMPT, extra, query),
         tools=GITHUB_TOOLS,
         plan_calls=plan_market_calls,
         finalize=_finalize,

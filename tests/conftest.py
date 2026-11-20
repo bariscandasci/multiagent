@@ -36,6 +36,9 @@ def offline_llm(monkeypatch, tmp_path):
     monkeypatch.setattr("tools.crm.CRM_PATH", tmp_path / "crm.json")
     monkeypatch.setattr("agents.context.CONFIG_PATH", tmp_path / "ajan_ayarlari.json")
     monkeypatch.setattr("agents.context.MEMORY_PATH", tmp_path / "hafiza.json")
+    knowledge = tmp_path / "bilgi_bankasi"
+    knowledge.mkdir()
+    monkeypatch.setattr("tools.knowledge.INDEX_PATH", knowledge / "index.json")
     from memory.session import reset_orchestrator
 
     reset_orchestrator()

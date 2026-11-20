@@ -10,7 +10,7 @@ import threading
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, PlainTextResponse, Response, StreamingResponse
 
@@ -33,6 +33,8 @@ from api.schemas import (
     EmailDraftResponse,
     ExpenseUpdate,
     HealthResponse,
+    KnowledgeDocument,
+    KnowledgeLibrary,
     LedgerResponse,
     MemoryCreate,
     MemoryDocument,
@@ -64,6 +66,7 @@ from tools.finance_tools import (
     update_expense_row,
 )
 from tools.github_tools import PROJECTS_DIR, list_projects, load_project
+from tools.knowledge import KnowledgeError, add_document, delete_document, list_documents
 
 ROOT = Path(__file__).resolve().parents[1]
 INDEX = ROOT / "static" / "index.html"
@@ -433,6 +436,28 @@ def create_app(orchestrator: Orchestrator | None = None) -> FastAPI:
             raise HTTPException(status_code=422, detail="Dört ajanın tamamı gerekli.")
         save_agents([agent.model_dump() for agent in payload.agents])
         return _config_document()
+
+    @app.get("/api/knowledge", response_model=KnowledgeLibrary, tags=["bilgi-bankasi"])
+    def read_knowledge() -> KnowledgeLibrary:
+        return KnowledgeLibrary(documents=[KnowledgeDocument(**row) for row in list_documents()])
+
+    @app.post("/api/knowledge/upload", response_model=KnowledgeDocument, tags=["bilgi-bankasi"])
+    async def upload_knowledge(
+        file: UploadFile = File(...),
+        department: str = Form("all"),
+    ) -> KnowledgeDocument:
+        payload = await file.read()
+        try:
+            saved = add_document(file.filename or "dokuman.txt", department, payload)
+        except KnowledgeError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return KnowledgeDocument(**saved)
+
+    @app.delete("/api/knowledge/{doc_id}", response_model=KnowledgeLibrary, tags=["bilgi-bankasi"])
+    def remove_knowledge(doc_id: str) -> KnowledgeLibrary:
+        if not delete_document(doc_id):
+            raise HTTPException(status_code=404, detail="Doküman bulunamadı.")
+        return read_knowledge()
 
     @app.get("/api/memory", response_model=MemoryDocument, tags=["hafiza"])
     def read_memory() -> MemoryDocument:

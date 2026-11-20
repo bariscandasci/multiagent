@@ -181,12 +181,12 @@ ROUTING_PROMPT = (
 )
 
 
-def routing_prompt() -> str:
-    return compose_prompt("supervisor", ROUTING_PROMPT)
+def routing_prompt(query: str = "") -> str:
+    return compose_prompt("supervisor", ROUTING_PROMPT, query=query)
 
 
 def _llm_route(query: str, previous: str) -> str | None:
-    prompt = routing_prompt()
+    prompt = routing_prompt(query)
     model = bind_agent_model(
         get_settings(),
         agent_temperature("supervisor"),

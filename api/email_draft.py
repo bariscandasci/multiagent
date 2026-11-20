@@ -44,7 +44,11 @@ def draft_sales_email(project_name: str, customer_profile: str, sections: dict) 
 
 def _from_model(project_name: str, customer_profile: str, sections: dict) -> tuple[str, str]:
     model = bind_agent_model(get_settings(), agent_temperature("market"))
-    system = compose_prompt("market", EMAIL_DIRECTIVE)
+    system = compose_prompt(
+        "market",
+        EMAIL_DIRECTIVE,
+        query=f"{project_name}\n{customer_profile}",
+    )
     brief = "\n\n".join(
         part
         for part in (

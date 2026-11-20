@@ -33,7 +33,7 @@ def rnd_node(state: AgentState) -> dict:
         agent_name="rnd_agent",
         title=f"Teknik & Ar-Ge — {COMPANY}",
         pipeline_label="Teknik Ar-Ge",
-        system_prompt=compose_prompt("rnd", SYSTEM_PROMPT, extra),
+        system_prompt=compose_prompt("rnd", SYSTEM_PROMPT, extra, query),
         tools=GITHUB_TOOLS,
         plan_calls=plan_rnd_calls,
         finalize=_finalize,

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from agents.context import agent_temperature, compose_prompt
-from agents.runtime import run_department
+from agents.runtime import last_user_text, run_department
 from agents.state import AgentState
 from tools.common import COMPANY, contains_term, dedupe_calls, fold
 from tools.finance_tools import FINANCE_TOOLS, parse_amount
@@ -47,6 +47,7 @@ def plan_finance_calls(text: str) -> list[tuple[str, dict]]:
 
 def finance_node(state: AgentState) -> dict:
     slug = str(state.get("project_slug") or "")
+    query = last_user_text(list(state.get("messages") or []))
     extra = f"Simülasyonu {slug} projesi için çalıştır." if slug else ""
     return run_department(
         state,
@@ -54,7 +55,7 @@ def finance_node(state: AgentState) -> dict:
         agent_name="finance_agent",
         title=f"Muhasebe & Finans — {COMPANY}",
         pipeline_label="Muhasebe",
-        system_prompt=compose_prompt("finance", SYSTEM_PROMPT, extra),
+        system_prompt=compose_prompt("finance", SYSTEM_PROMPT, extra, query),
         tools=FINANCE_TOOLS,
         plan_calls=plan_finance_calls,
         temperature=agent_temperature("finance"),
